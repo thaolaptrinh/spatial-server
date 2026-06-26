@@ -33,7 +33,7 @@ func main() {
 
 	wsPort := k.Int("gateway.ws_port")
 	cache := gateway.NewRouterCache(5 * time.Second)
-	handler := gateway.NewHandler(cache)
+	handler := gateway.NewHandler(cache, nil, nil)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", wsPort),
