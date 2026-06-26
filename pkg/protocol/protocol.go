@@ -37,7 +37,7 @@ func Encode(id PacketID, payload []byte, compress bool) []byte {
 		var buf bytes.Buffer
 		w, err := gzip.NewWriterLevel(&buf, compressionLevel)
 		if err == nil {
-			w.Write(payload)
+			w.Write(payload) //nolint:errcheck // fallback to uncompressed on error
 			w.Close()
 			if buf.Len() < len(payload) {
 				data = buf.Bytes()

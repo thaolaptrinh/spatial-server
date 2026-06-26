@@ -33,7 +33,8 @@ spatial-server/
 │   └── zone/                    # Zone management
 ├── internal/                # Internal shared types and utilities
 │   ├── types/                   # Shared Go types
-│   └── utils/                   # Shared utilities
+│   ├── utils/                   # Shared utilities
+│   └── migration/               # Database migration runner
 ├── proto/                   # gRPC protobuf definitions
 │   ├── common.proto
 │   ├── gateway.proto
@@ -45,9 +46,10 @@ spatial-server/
 │   ├── gateway.yml
 │   ├── room-service.yml
 │   └── game-server.yml
-├── deploy/                  # Docker Compose, Dockerfiles
-│   ├── docker-compose/          # Docker Compose (local dev only)
+├── build/                   # Build system
 │   └── docker/                  # Dockerfiles per service
+├── deploy/                  # Docker Compose (local dev only)
+│   └── docker-compose/
 ├── infra/                   # Terraform, Helm, cloud-init
 │   ├── terraform/
 │   │   ├── providers/
@@ -105,15 +107,17 @@ spatial-server/
 | `pkg/rpc/` | gRPC client/server helpers, interceptors, connection pooling. |
 | `pkg/session/` | Session management, reconnection tokens, state recovery. |
 | `pkg/space/` | Space/Room model: runtime definition, zone composition. |
-| `pkg/storage/` | PostgreSQL (pgx) and Redis (go-redis) connections, migrations (golang-migrate). |
+| `pkg/storage/` | PostgreSQL (pgx) and Redis (go-redis) connection pools, repositories, transactions. NOT migration runner. |
 | `pkg/zone/` | Zone management: grid cell operations, boundary calculations. |
 | `internal/` | Internal shared types and utilities not importable outside the module. |
 | `internal/types/` | Shared Go types used across packages. |
 | `internal/utils/` | Shared utility functions. |
+| `internal/migration/` | Database migration runner (golang-migrate). |
 | `proto/` | gRPC protobuf definition files (.proto). |
 | `gen/` | Generated protobuf Go code. |
 | `configs/` | YAML configuration files per service and shared defaults. |
-| `deploy/` | Docker Compose for local dev, Dockerfiles for each service. |
+| `build/` | Build artifacts: Dockerfiles for each service, base image configs. |
+| `deploy/` | Docker Compose for local dev. |
 | `infra/` | Infrastructure as Code: Terraform, Helm charts, cloud-init scripts. |
 | `infra/terraform/` | Terraform providers, modules, environment configurations. |
 | `infra/helm/` | Helm charts for gateway, room-service, game-server, redis, postgres, monitoring. |
@@ -138,7 +142,8 @@ No package in pkg/ depends on apps/*
 - `apps/` imports any `pkg/` and `internal/` package.
 - `pkg/` depends only on the standard library, Google gRPC, protobuf, and slog.
 - `pkg/` never depends on `apps/` or HTTP frameworks (except in dedicated adapter packages).
-- Infrastructure abstractions live in `pkg/storage/`.
+- Infrastructure abstractions live in `pkg/storage/` (connection pools only).
+- Migration runner lives in `internal/migration/` (not in `pkg/storage/`).
 
 ### Per-Package Dependency Rules
 
@@ -148,6 +153,7 @@ No package in pkg/ depends on apps/*
 | `pkg/entity/` | `internal/types/`, standard library only |
 | `pkg/aoi/` | `internal/types/`, standard library only (in-memory index) |
 | `pkg/storage/` | pgx, go-redis, standard library |
+| `internal/migration/` | golang-migrate, pgx, standard library |
 | `pkg/gateway/` | nhooyr.io/websocket, pkg/protocol, pkg/auth |
 | `pkg/room/` | google gRPC, pkg/cluster, pgx |
 | `pkg/game/` | google gRPC, pkg/entity, pkg/space, pkg/aoi, pkg/protocol |
