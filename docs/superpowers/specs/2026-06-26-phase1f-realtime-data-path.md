@@ -32,16 +32,17 @@ Design principles:
 
 | Milestone | Scope | Independently testable |
 |-----------|-------|------------------------|
-| 1F.1 | Gateway: real WebSocket upgrade (nhooyr.io) + JWT validation + `session.Pool` | Client completes WSS handshake; invalid token rejected; conn closes cleanly |
+| 1F.1 | Gateway: real WebSocket upgrade (`github.com/coder/websocket`) + JWT validation + `session.Pool` | Client completes WSS handshake; invalid token rejected; conn closes cleanly |
 | 1F.2 | Game Server: implement `GameServer.Relay` — stream ↔ Inbox/Outbox bridge, drain goroutine, client→stream registry, CONNECT/DISCONNECT entity lifecycle | gRPC test client sends CONNECT → entity created; DATA → observed in Inbox; Outbox packet → received on stream; DISCONNECT → entity removed |
 | 1F.3 | Gateway ↔ Game Server wiring: LookupZone → dial → open Relay stream, dual pump WS↔stream | Integration test across gateway + room-service + game-server |
 | 1F.4 | `pkg/game` real protocol encode/decode + fix `dispatch` position parsing + drop-on-full send | Unit test: PositionUpdate packet moves entity + `aoi.Move`; spawn/move packets are valid protocol frames |
 
 ### 1F.1 — WebSocket layer (gateway)
 
-- `/ws` handler performs `websocket.Accept` (nhooyr.io); reject when the `token` query param is missing or invalid.
+- `/ws` handler performs `websocket.Accept` (`github.com/coder/websocket`); reject when the `token` query param is missing or invalid.
 - `auth.ValidateToken(token, jwtSecret)` → `Claims{RuntimeID, PlayerID, ZoneID}`. `jwtSecret` is read from config key `gateway.jwt_secret`.
-- Create `session.NewSession(clientID, PlayerID, ZoneID, ...)`, add to `session.Pool`.
+- `clientID = Claims.PlayerID` (1 player = 1 entity in this slice; this value becomes `RelayPacket.client_id` and the `EntityID` on the game server).
+- Create `session.NewSession(clientID, Claims.PlayerID, types.ZoneID(Claims.ZoneID), serverID)` — `serverID` comes from the `LookupZone` response — and add to `session.Pool`.
 - On disconnect: `pool.Remove`, cleanup.
 - Assumption: the client already holds a valid JWT minted out-of-band; minting is out of scope.
 
@@ -78,7 +79,7 @@ Why the control plane: the gateway holds the JWT `Claims` (player_id/runtime_id)
 Service implementation mirrors the existing `roomServiceServer` pattern (`apps/room-service/main.go`): a thin gRPC adapter struct (`gameServerServer`) in `apps/game-server/main.go` wrapping the core `pkg/game` logic — not a new package.
 
 - Per `client_id` seen on the stream: register a send channel in `clientStreams map[string]chan []byte`.
-- Entity lifecycle: on `KIND_CONNECT` → `game.AddEntity(entity.New(EntityID(client_id), "avatar", RuntimeID(meta.runtime_id)))`; on `KIND_DISCONNECT` (or stream close / context cancel) → `game.RemoveEntity` + delete send channel.
+- Entity lifecycle: on `KIND_CONNECT` → `game.EnqueueAddEntity(entity.New(EntityID(client_id), "avatar", RuntimeID(meta.runtime_id)))`; on `KIND_DISCONNECT` (or stream close / context cancel) → `game.EnqueueRemoveEntity(EntityID(client_id))` + delete send channel.
 - Inbound pump: on `KIND_DATA` → `game.Inbox <- InboundPacket{ClientID, payload}`; ignore payload for CONNECT/DISCONNECT.
 - Outbound drain goroutine: `for pkt := range game.Outbox` → lookup `clientStreams[pkt.ClientID]` → non-blocking send to that client's send queue; queue full → drop + log.
 - Each client's send queue is drained by a goroutine writing `RelayPacket{client_id, KIND_DATA, payload}` back on the shared stream (guarded by a write mutex — gRPC streams are not safe for concurrent writers).
@@ -105,6 +106,20 @@ Service implementation mirrors the existing `roomServiceServer` pattern (`apps/r
 - Fix `dispatch`: decode `PositionUpdate` → update `e.Position` → `g.aoi.Move(e.ID, e.Position)`. (Current bug calls `Move` with the pre-update position.)
 - Drop-on-full send: `select { case Outbox <- pkt: default: log drop }` so a stalled drain can never freeze the tick loop.
 
+### Concurrency model (critical)
+
+`pkg/game` currently mutates `Entities`/`aoi` only from the tick goroutine. Phase 1F introduces a second writer: the Relay handler calls `AddEntity`/`RemoveEntity` from its own goroutine → **data race** with `tick()` (would fail `go test -race`, which the repo runs on every test invocation).
+
+Fix — keep all simulation-state mutation on the tick goroutine (actor pattern):
+
+- `Game` gains a command channel `cmds chan func()`.
+- A new enqueue API (e.g. `EnqueueAddEntity` / `EnqueueRemoveEntity`) is used by the Relay handler: it pushes a command closure onto `cmds` rather than mutating directly.
+- The existing synchronous `AddEntity`/`RemoveEntity` stay as-is for setup/tests (called pre-`Run`, single-threaded) so no current caller breaks.
+- `tick()` drains `cmds` and executes each closure before running simulation, so entity-map and AOI mutation from the Relay path stay single-threaded.
+- `Inbox`/`Outbox` remain channels (already safe across goroutines).
+
+This avoids broad locking and preserves the existing (already inconsistent) `g.mu` usage as a smaller follow-up rather than a blocker.
+
 ## Demo scenario
 
 1 client + 1 static NPC pre-spawned (`game.AddEntity` at startup). The client connects, immediately receives an `EntitySpawn` for the NPC (AOI visibility), sends `PositionUpdate`s, and the NPC entering/leaving AOI produces spawn/despawn. This exercises the full loop with a single browser.
@@ -121,13 +136,17 @@ Service implementation mirrors the existing `roomServiceServer` pattern (`apps/r
 ## Assumptions
 
 - `gateway.jwt_secret` is added to `configs/gateway.yml` and `configs/defaults.yml`.
+- The WebSocket library must be added as a dependency: `github.com/coder/websocket` (the maintained successor of `nhooyr.io/websocket`, which the standards permit). 1F.1 begins with `go get`.
+- The `GameServer` gRPC service (including `Relay`) is registered on the existing game-server gRPC server, alongside health + reflection (which are the only services registered today).
 - The client's zone is already assigned to a game-server (Room Service `LookupZone` returns an owner). Pre-assignment happens at startup; dynamic assignment is out of scope.
+- The end-to-end integration test brings up room-service dependencies (PostgreSQL + Redis) via Testcontainers, per the repo's integration-test convention, or substitutes an in-process fake `RoomServiceClient`.
 
 ## Definition of Done
 
 - Client completes WSS handshake with a valid JWT; an invalid token is rejected.
 - `GameServer.Relay` gRPC service is implemented and bridges the stream ↔ Inbox/Outbox.
 - Client connect creates an Entity; disconnect removes it.
+- Entity lifecycle mutations are race-free: `go test ./pkg/game/... -race` passes with concurrent Relay-driven `AddEntity`/`RemoveEntity`.
 - `game.Outbox` is drained (the game loop never blocks on send).
 - A `PositionUpdate` packet moves the entity and updates AOI.
 - Spawn/move/despawn outbound packets are valid `protocol.Encode` frames.
