@@ -20,11 +20,11 @@ CREATE TABLE IF NOT EXISTS runtimes (
 
 CREATE TABLE IF NOT EXISTS zones (
     id TEXT PRIMARY KEY,
-    runtime_id TEXT NOT NULL REFERENCES runtimes(id),
+    runtime_id TEXT NOT NULL REFERENCES runtimes(id) ON DELETE CASCADE,
     grid_x INTEGER NOT NULL,
     grid_y INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'unowned',
-    server_id TEXT REFERENCES game_servers(id),
+    server_id TEXT REFERENCES game_servers(id) ON DELETE SET NULL,
     size DOUBLE PRECISION NOT NULL DEFAULT 100,
     UNIQUE(runtime_id, grid_x, grid_y)
 );
