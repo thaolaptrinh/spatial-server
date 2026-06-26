@@ -27,6 +27,7 @@ const (
 	GameServer_NotifyEntityLeave_FullMethodName = "/spatialserver.v1.GameServer/NotifyEntityLeave"
 	GameServer_SendEntityUpdate_FullMethodName  = "/spatialserver.v1.GameServer/SendEntityUpdate"
 	GameServer_QueryEntities_FullMethodName     = "/spatialserver.v1.GameServer/QueryEntities"
+	GameServer_Relay_FullMethodName             = "/spatialserver.v1.GameServer/Relay"
 )
 
 // GameServerClient is the client API for GameServer service.
@@ -41,6 +42,7 @@ type GameServerClient interface {
 	NotifyEntityLeave(ctx context.Context, in *EntityEnterLeave, opts ...grpc.CallOption) (*NotifyResponse, error)
 	SendEntityUpdate(ctx context.Context, in *EntityUpdate, opts ...grpc.CallOption) (*Ack, error)
 	QueryEntities(ctx context.Context, in *QueryEntitiesRequest, opts ...grpc.CallOption) (*QueryEntitiesResponse, error)
+	Relay(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[RelayPacket, RelayPacket], error)
 }
 
 type gameServerClient struct {
@@ -134,6 +136,19 @@ func (c *gameServerClient) QueryEntities(ctx context.Context, in *QueryEntitiesR
 	return out, nil
 }
 
+func (c *gameServerClient) Relay(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[RelayPacket, RelayPacket], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &GameServer_ServiceDesc.Streams[1], GameServer_Relay_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[RelayPacket, RelayPacket]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GameServer_RelayClient = grpc.BidiStreamingClient[RelayPacket, RelayPacket]
+
 // GameServerServer is the server API for GameServer service.
 // All implementations must embed UnimplementedGameServerServer
 // for forward compatibility.
@@ -146,6 +161,7 @@ type GameServerServer interface {
 	NotifyEntityLeave(context.Context, *EntityEnterLeave) (*NotifyResponse, error)
 	SendEntityUpdate(context.Context, *EntityUpdate) (*Ack, error)
 	QueryEntities(context.Context, *QueryEntitiesRequest) (*QueryEntitiesResponse, error)
+	Relay(grpc.BidiStreamingServer[RelayPacket, RelayPacket]) error
 	mustEmbedUnimplementedGameServerServer()
 }
 
@@ -179,6 +195,9 @@ func (UnimplementedGameServerServer) SendEntityUpdate(context.Context, *EntityUp
 }
 func (UnimplementedGameServerServer) QueryEntities(context.Context, *QueryEntitiesRequest) (*QueryEntitiesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryEntities not implemented")
+}
+func (UnimplementedGameServerServer) Relay(grpc.BidiStreamingServer[RelayPacket, RelayPacket]) error {
+	return status.Error(codes.Unimplemented, "method Relay not implemented")
 }
 func (UnimplementedGameServerServer) mustEmbedUnimplementedGameServerServer() {}
 func (UnimplementedGameServerServer) testEmbeddedByValue()                    {}
@@ -334,6 +353,13 @@ func _GameServer_QueryEntities_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GameServer_Relay_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GameServerServer).Relay(&grpc.GenericServerStream[RelayPacket, RelayPacket]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GameServer_RelayServer = grpc.BidiStreamingServer[RelayPacket, RelayPacket]
+
 // GameServer_ServiceDesc is the grpc.ServiceDesc for GameServer service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -374,6 +400,12 @@ var GameServer_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ZoneStateSync",
 			Handler:       _GameServer_ZoneStateSync_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Relay",
+			Handler:       _GameServer_Relay_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},

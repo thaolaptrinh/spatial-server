@@ -15,6 +15,27 @@ service GameServer {
   rpc NotifyEntityLeave(spatialserver.v1.EntityEnterLeave) returns (NotifyResponse);
   rpc SendEntityUpdate(spatialserver.v1.EntityUpdate) returns (spatialserver.v1.Ack);
   rpc QueryEntities(QueryEntitiesRequest) returns (QueryEntitiesResponse);
+  rpc Relay(stream RelayPacket) returns (stream RelayPacket);
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_DATA = 1;
+  KIND_CONNECT = 2;
+  KIND_DISCONNECT = 3;
+}
+
+message RelayPacket {
+  string      client_id = 1;
+  Kind        kind      = 2;
+  bytes       payload   = 3;
+  ConnectMeta meta      = 4;
+}
+
+message ConnectMeta {
+  string player_id  = 1;
+  string runtime_id = 2;
+  string zone_id    = 3;
 }
 
 message AssignZoneRequest {

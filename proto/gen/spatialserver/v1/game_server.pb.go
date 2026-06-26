@@ -21,6 +21,186 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Kind int32
+
+const (
+	Kind_KIND_UNSPECIFIED Kind = 0
+	Kind_KIND_DATA        Kind = 1
+	Kind_KIND_CONNECT     Kind = 2
+	Kind_KIND_DISCONNECT  Kind = 3
+)
+
+// Enum value maps for Kind.
+var (
+	Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "KIND_DATA",
+		2: "KIND_CONNECT",
+		3: "KIND_DISCONNECT",
+	}
+	Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"KIND_DATA":        1,
+		"KIND_CONNECT":     2,
+		"KIND_DISCONNECT":  3,
+	}
+)
+
+func (x Kind) Enum() *Kind {
+	p := new(Kind)
+	*p = x
+	return p
+}
+
+func (x Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_spatialserver_v1_game_server_proto_enumTypes[0].Descriptor()
+}
+
+func (Kind) Type() protoreflect.EnumType {
+	return &file_spatialserver_v1_game_server_proto_enumTypes[0]
+}
+
+func (x Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Kind.Descriptor instead.
+func (Kind) EnumDescriptor() ([]byte, []int) {
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{0}
+}
+
+type RelayPacket struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Kind          Kind                   `protobuf:"varint,2,opt,name=kind,proto3,enum=spatialserver.v1.Kind" json:"kind,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Meta          *ConnectMeta           `protobuf:"bytes,4,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelayPacket) Reset() {
+	*x = RelayPacket{}
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelayPacket) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelayPacket) ProtoMessage() {}
+
+func (x *RelayPacket) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelayPacket.ProtoReflect.Descriptor instead.
+func (*RelayPacket) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *RelayPacket) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *RelayPacket) GetKind() Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return Kind_KIND_UNSPECIFIED
+}
+
+func (x *RelayPacket) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *RelayPacket) GetMeta() *ConnectMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+type ConnectMeta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	RuntimeId     string                 `protobuf:"bytes,2,opt,name=runtime_id,json=runtimeId,proto3" json:"runtime_id,omitempty"`
+	ZoneId        string                 `protobuf:"bytes,3,opt,name=zone_id,json=zoneId,proto3" json:"zone_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectMeta) Reset() {
+	*x = ConnectMeta{}
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectMeta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectMeta) ProtoMessage() {}
+
+func (x *ConnectMeta) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectMeta.ProtoReflect.Descriptor instead.
+func (*ConnectMeta) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ConnectMeta) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *ConnectMeta) GetRuntimeId() string {
+	if x != nil {
+		return x.RuntimeId
+	}
+	return ""
+}
+
+func (x *ConnectMeta) GetZoneId() string {
+	if x != nil {
+		return x.ZoneId
+	}
+	return ""
+}
+
 type AssignZoneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ZoneId        string                 `protobuf:"bytes,1,opt,name=zone_id,json=zoneId,proto3" json:"zone_id,omitempty"`
@@ -34,7 +214,7 @@ type AssignZoneRequest struct {
 
 func (x *AssignZoneRequest) Reset() {
 	*x = AssignZoneRequest{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[0]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +226,7 @@ func (x *AssignZoneRequest) String() string {
 func (*AssignZoneRequest) ProtoMessage() {}
 
 func (x *AssignZoneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[0]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +239,7 @@ func (x *AssignZoneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignZoneRequest.ProtoReflect.Descriptor instead.
 func (*AssignZoneRequest) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{0}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *AssignZoneRequest) GetZoneId() string {
@@ -106,7 +286,7 @@ type AssignZoneResponse struct {
 
 func (x *AssignZoneResponse) Reset() {
 	*x = AssignZoneResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[1]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -118,7 +298,7 @@ func (x *AssignZoneResponse) String() string {
 func (*AssignZoneResponse) ProtoMessage() {}
 
 func (x *AssignZoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[1]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -131,7 +311,7 @@ func (x *AssignZoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignZoneResponse.ProtoReflect.Descriptor instead.
 func (*AssignZoneResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{1}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AssignZoneResponse) GetSuccess() bool {
@@ -151,7 +331,7 @@ type ReleaseZoneRequest struct {
 
 func (x *ReleaseZoneRequest) Reset() {
 	*x = ReleaseZoneRequest{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[2]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -163,7 +343,7 @@ func (x *ReleaseZoneRequest) String() string {
 func (*ReleaseZoneRequest) ProtoMessage() {}
 
 func (x *ReleaseZoneRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[2]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -176,7 +356,7 @@ func (x *ReleaseZoneRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseZoneRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseZoneRequest) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{2}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReleaseZoneRequest) GetZoneId() string {
@@ -202,7 +382,7 @@ type ReleaseZoneResponse struct {
 
 func (x *ReleaseZoneResponse) Reset() {
 	*x = ReleaseZoneResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[3]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -214,7 +394,7 @@ func (x *ReleaseZoneResponse) String() string {
 func (*ReleaseZoneResponse) ProtoMessage() {}
 
 func (x *ReleaseZoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[3]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -227,7 +407,7 @@ func (x *ReleaseZoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseZoneResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseZoneResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{3}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ReleaseZoneResponse) GetSuccess() bool {
@@ -247,7 +427,7 @@ type MigrateEntityRequest struct {
 
 func (x *MigrateEntityRequest) Reset() {
 	*x = MigrateEntityRequest{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[4]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -259,7 +439,7 @@ func (x *MigrateEntityRequest) String() string {
 func (*MigrateEntityRequest) ProtoMessage() {}
 
 func (x *MigrateEntityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[4]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,7 +452,7 @@ func (x *MigrateEntityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateEntityRequest.ProtoReflect.Descriptor instead.
 func (*MigrateEntityRequest) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{4}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MigrateEntityRequest) GetEntity() *EntitySnapshot {
@@ -298,7 +478,7 @@ type MigrateEntityResponse struct {
 
 func (x *MigrateEntityResponse) Reset() {
 	*x = MigrateEntityResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[5]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +490,7 @@ func (x *MigrateEntityResponse) String() string {
 func (*MigrateEntityResponse) ProtoMessage() {}
 
 func (x *MigrateEntityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[5]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +503,7 @@ func (x *MigrateEntityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateEntityResponse.ProtoReflect.Descriptor instead.
 func (*MigrateEntityResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{5}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MigrateEntityResponse) GetSuccess() bool {
@@ -342,7 +522,7 @@ type ZoneStateSyncResponse struct {
 
 func (x *ZoneStateSyncResponse) Reset() {
 	*x = ZoneStateSyncResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[6]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +534,7 @@ func (x *ZoneStateSyncResponse) String() string {
 func (*ZoneStateSyncResponse) ProtoMessage() {}
 
 func (x *ZoneStateSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[6]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +547,7 @@ func (x *ZoneStateSyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZoneStateSyncResponse.ProtoReflect.Descriptor instead.
 func (*ZoneStateSyncResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{6}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ZoneStateSyncResponse) GetSuccess() bool {
@@ -386,7 +566,7 @@ type NotifyResponse struct {
 
 func (x *NotifyResponse) Reset() {
 	*x = NotifyResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[7]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +578,7 @@ func (x *NotifyResponse) String() string {
 func (*NotifyResponse) ProtoMessage() {}
 
 func (x *NotifyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[7]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +591,7 @@ func (x *NotifyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotifyResponse.ProtoReflect.Descriptor instead.
 func (*NotifyResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{7}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *NotifyResponse) GetAcknowledged() bool {
@@ -433,7 +613,7 @@ type QueryEntitiesRequest struct {
 
 func (x *QueryEntitiesRequest) Reset() {
 	*x = QueryEntitiesRequest{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[8]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +625,7 @@ func (x *QueryEntitiesRequest) String() string {
 func (*QueryEntitiesRequest) ProtoMessage() {}
 
 func (x *QueryEntitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[8]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +638,7 @@ func (x *QueryEntitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryEntitiesRequest.ProtoReflect.Descriptor instead.
 func (*QueryEntitiesRequest) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{8}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *QueryEntitiesRequest) GetGridX() int32 {
@@ -498,7 +678,7 @@ type QueryEntitiesResponse struct {
 
 func (x *QueryEntitiesResponse) Reset() {
 	*x = QueryEntitiesResponse{}
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[9]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -510,7 +690,7 @@ func (x *QueryEntitiesResponse) String() string {
 func (*QueryEntitiesResponse) ProtoMessage() {}
 
 func (x *QueryEntitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_spatialserver_v1_game_server_proto_msgTypes[9]
+	mi := &file_spatialserver_v1_game_server_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -523,7 +703,7 @@ func (x *QueryEntitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryEntitiesResponse.ProtoReflect.Descriptor instead.
 func (*QueryEntitiesResponse) Descriptor() ([]byte, []int) {
-	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{9}
+	return file_spatialserver_v1_game_server_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *QueryEntitiesResponse) GetEntities() []*EntitySnapshot {
@@ -537,7 +717,17 @@ var File_spatialserver_v1_game_server_proto protoreflect.FileDescriptor
 
 const file_spatialserver_v1_game_server_proto_rawDesc = "" +
 	"\n" +
-	"\"spatialserver/v1/game_server.proto\x12\x10spatialserver.v1\x1a\x1dspatialserver/v1/common.proto\"\x96\x01\n" +
+	"\"spatialserver/v1/game_server.proto\x12\x10spatialserver.v1\x1a\x1dspatialserver/v1/common.proto\"\xa3\x01\n" +
+	"\vRelayPacket\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12*\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x16.spatialserver.v1.KindR\x04kind\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x121\n" +
+	"\x04meta\x18\x04 \x01(\v2\x1d.spatialserver.v1.ConnectMetaR\x04meta\"b\n" +
+	"\vConnectMeta\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x1d\n" +
+	"\n" +
+	"runtime_id\x18\x02 \x01(\tR\truntimeId\x12\x17\n" +
+	"\azone_id\x18\x03 \x01(\tR\x06zoneId\"\x96\x01\n" +
 	"\x11AssignZoneRequest\x12\x17\n" +
 	"\azone_id\x18\x01 \x01(\tR\x06zoneId\x12\x1d\n" +
 	"\n" +
@@ -569,7 +759,12 @@ const file_spatialserver_v1_game_server_proto_rawDesc = "" +
 	"\vtype_filter\x18\x04 \x03(\tR\n" +
 	"typeFilter\"U\n" +
 	"\x15QueryEntitiesResponse\x12<\n" +
-	"\bentities\x18\x01 \x03(\v2 .spatialserver.v1.EntitySnapshotR\bentities2\xe2\x05\n" +
+	"\bentities\x18\x01 \x03(\v2 .spatialserver.v1.EntitySnapshotR\bentities*R\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tKIND_DATA\x10\x01\x12\x10\n" +
+	"\fKIND_CONNECT\x10\x02\x12\x13\n" +
+	"\x0fKIND_DISCONNECT\x10\x032\xad\x06\n" +
 	"\n" +
 	"GameServer\x12W\n" +
 	"\n" +
@@ -580,7 +775,8 @@ const file_spatialserver_v1_game_server_proto_rawDesc = "" +
 	"\x11NotifyEntityEnter\x12\".spatialserver.v1.EntityEnterLeave\x1a .spatialserver.v1.NotifyResponse\x12Y\n" +
 	"\x11NotifyEntityLeave\x12\".spatialserver.v1.EntityEnterLeave\x1a .spatialserver.v1.NotifyResponse\x12I\n" +
 	"\x10SendEntityUpdate\x12\x1e.spatialserver.v1.EntityUpdate\x1a\x15.spatialserver.v1.Ack\x12`\n" +
-	"\rQueryEntities\x12&.spatialserver.v1.QueryEntitiesRequest\x1a'.spatialserver.v1.QueryEntitiesResponseBSZQgithub.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1b\x06proto3"
+	"\rQueryEntities\x12&.spatialserver.v1.QueryEntitiesRequest\x1a'.spatialserver.v1.QueryEntitiesResponse\x12I\n" +
+	"\x05Relay\x12\x1d.spatialserver.v1.RelayPacket\x1a\x1d.spatialserver.v1.RelayPacket(\x010\x01BSZQgithub.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1b\x06proto3"
 
 var (
 	file_spatialserver_v1_game_server_proto_rawDescOnce sync.Once
@@ -594,48 +790,56 @@ func file_spatialserver_v1_game_server_proto_rawDescGZIP() []byte {
 	return file_spatialserver_v1_game_server_proto_rawDescData
 }
 
-var file_spatialserver_v1_game_server_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_spatialserver_v1_game_server_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_spatialserver_v1_game_server_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_spatialserver_v1_game_server_proto_goTypes = []any{
-	(*AssignZoneRequest)(nil),     // 0: spatialserver.v1.AssignZoneRequest
-	(*AssignZoneResponse)(nil),    // 1: spatialserver.v1.AssignZoneResponse
-	(*ReleaseZoneRequest)(nil),    // 2: spatialserver.v1.ReleaseZoneRequest
-	(*ReleaseZoneResponse)(nil),   // 3: spatialserver.v1.ReleaseZoneResponse
-	(*MigrateEntityRequest)(nil),  // 4: spatialserver.v1.MigrateEntityRequest
-	(*MigrateEntityResponse)(nil), // 5: spatialserver.v1.MigrateEntityResponse
-	(*ZoneStateSyncResponse)(nil), // 6: spatialserver.v1.ZoneStateSyncResponse
-	(*NotifyResponse)(nil),        // 7: spatialserver.v1.NotifyResponse
-	(*QueryEntitiesRequest)(nil),  // 8: spatialserver.v1.QueryEntitiesRequest
-	(*QueryEntitiesResponse)(nil), // 9: spatialserver.v1.QueryEntitiesResponse
-	(*EntitySnapshot)(nil),        // 10: spatialserver.v1.EntitySnapshot
-	(*ZoneSnapshot)(nil),          // 11: spatialserver.v1.ZoneSnapshot
-	(*EntityEnterLeave)(nil),      // 12: spatialserver.v1.EntityEnterLeave
-	(*EntityUpdate)(nil),          // 13: spatialserver.v1.EntityUpdate
-	(*Ack)(nil),                   // 14: spatialserver.v1.Ack
+	(Kind)(0),                     // 0: spatialserver.v1.Kind
+	(*RelayPacket)(nil),           // 1: spatialserver.v1.RelayPacket
+	(*ConnectMeta)(nil),           // 2: spatialserver.v1.ConnectMeta
+	(*AssignZoneRequest)(nil),     // 3: spatialserver.v1.AssignZoneRequest
+	(*AssignZoneResponse)(nil),    // 4: spatialserver.v1.AssignZoneResponse
+	(*ReleaseZoneRequest)(nil),    // 5: spatialserver.v1.ReleaseZoneRequest
+	(*ReleaseZoneResponse)(nil),   // 6: spatialserver.v1.ReleaseZoneResponse
+	(*MigrateEntityRequest)(nil),  // 7: spatialserver.v1.MigrateEntityRequest
+	(*MigrateEntityResponse)(nil), // 8: spatialserver.v1.MigrateEntityResponse
+	(*ZoneStateSyncResponse)(nil), // 9: spatialserver.v1.ZoneStateSyncResponse
+	(*NotifyResponse)(nil),        // 10: spatialserver.v1.NotifyResponse
+	(*QueryEntitiesRequest)(nil),  // 11: spatialserver.v1.QueryEntitiesRequest
+	(*QueryEntitiesResponse)(nil), // 12: spatialserver.v1.QueryEntitiesResponse
+	(*EntitySnapshot)(nil),        // 13: spatialserver.v1.EntitySnapshot
+	(*ZoneSnapshot)(nil),          // 14: spatialserver.v1.ZoneSnapshot
+	(*EntityEnterLeave)(nil),      // 15: spatialserver.v1.EntityEnterLeave
+	(*EntityUpdate)(nil),          // 16: spatialserver.v1.EntityUpdate
+	(*Ack)(nil),                   // 17: spatialserver.v1.Ack
 }
 var file_spatialserver_v1_game_server_proto_depIdxs = []int32{
-	10, // 0: spatialserver.v1.MigrateEntityRequest.entity:type_name -> spatialserver.v1.EntitySnapshot
-	10, // 1: spatialserver.v1.QueryEntitiesResponse.entities:type_name -> spatialserver.v1.EntitySnapshot
-	0,  // 2: spatialserver.v1.GameServer.AssignZone:input_type -> spatialserver.v1.AssignZoneRequest
-	2,  // 3: spatialserver.v1.GameServer.ReleaseZone:input_type -> spatialserver.v1.ReleaseZoneRequest
-	4,  // 4: spatialserver.v1.GameServer.MigrateEntity:input_type -> spatialserver.v1.MigrateEntityRequest
-	11, // 5: spatialserver.v1.GameServer.ZoneStateSync:input_type -> spatialserver.v1.ZoneSnapshot
-	12, // 6: spatialserver.v1.GameServer.NotifyEntityEnter:input_type -> spatialserver.v1.EntityEnterLeave
-	12, // 7: spatialserver.v1.GameServer.NotifyEntityLeave:input_type -> spatialserver.v1.EntityEnterLeave
-	13, // 8: spatialserver.v1.GameServer.SendEntityUpdate:input_type -> spatialserver.v1.EntityUpdate
-	8,  // 9: spatialserver.v1.GameServer.QueryEntities:input_type -> spatialserver.v1.QueryEntitiesRequest
-	1,  // 10: spatialserver.v1.GameServer.AssignZone:output_type -> spatialserver.v1.AssignZoneResponse
-	3,  // 11: spatialserver.v1.GameServer.ReleaseZone:output_type -> spatialserver.v1.ReleaseZoneResponse
-	5,  // 12: spatialserver.v1.GameServer.MigrateEntity:output_type -> spatialserver.v1.MigrateEntityResponse
-	6,  // 13: spatialserver.v1.GameServer.ZoneStateSync:output_type -> spatialserver.v1.ZoneStateSyncResponse
-	7,  // 14: spatialserver.v1.GameServer.NotifyEntityEnter:output_type -> spatialserver.v1.NotifyResponse
-	7,  // 15: spatialserver.v1.GameServer.NotifyEntityLeave:output_type -> spatialserver.v1.NotifyResponse
-	14, // 16: spatialserver.v1.GameServer.SendEntityUpdate:output_type -> spatialserver.v1.Ack
-	9,  // 17: spatialserver.v1.GameServer.QueryEntities:output_type -> spatialserver.v1.QueryEntitiesResponse
-	10, // [10:18] is the sub-list for method output_type
-	2,  // [2:10] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	0,  // 0: spatialserver.v1.RelayPacket.kind:type_name -> spatialserver.v1.Kind
+	2,  // 1: spatialserver.v1.RelayPacket.meta:type_name -> spatialserver.v1.ConnectMeta
+	13, // 2: spatialserver.v1.MigrateEntityRequest.entity:type_name -> spatialserver.v1.EntitySnapshot
+	13, // 3: spatialserver.v1.QueryEntitiesResponse.entities:type_name -> spatialserver.v1.EntitySnapshot
+	3,  // 4: spatialserver.v1.GameServer.AssignZone:input_type -> spatialserver.v1.AssignZoneRequest
+	5,  // 5: spatialserver.v1.GameServer.ReleaseZone:input_type -> spatialserver.v1.ReleaseZoneRequest
+	7,  // 6: spatialserver.v1.GameServer.MigrateEntity:input_type -> spatialserver.v1.MigrateEntityRequest
+	14, // 7: spatialserver.v1.GameServer.ZoneStateSync:input_type -> spatialserver.v1.ZoneSnapshot
+	15, // 8: spatialserver.v1.GameServer.NotifyEntityEnter:input_type -> spatialserver.v1.EntityEnterLeave
+	15, // 9: spatialserver.v1.GameServer.NotifyEntityLeave:input_type -> spatialserver.v1.EntityEnterLeave
+	16, // 10: spatialserver.v1.GameServer.SendEntityUpdate:input_type -> spatialserver.v1.EntityUpdate
+	11, // 11: spatialserver.v1.GameServer.QueryEntities:input_type -> spatialserver.v1.QueryEntitiesRequest
+	1,  // 12: spatialserver.v1.GameServer.Relay:input_type -> spatialserver.v1.RelayPacket
+	4,  // 13: spatialserver.v1.GameServer.AssignZone:output_type -> spatialserver.v1.AssignZoneResponse
+	6,  // 14: spatialserver.v1.GameServer.ReleaseZone:output_type -> spatialserver.v1.ReleaseZoneResponse
+	8,  // 15: spatialserver.v1.GameServer.MigrateEntity:output_type -> spatialserver.v1.MigrateEntityResponse
+	9,  // 16: spatialserver.v1.GameServer.ZoneStateSync:output_type -> spatialserver.v1.ZoneStateSyncResponse
+	10, // 17: spatialserver.v1.GameServer.NotifyEntityEnter:output_type -> spatialserver.v1.NotifyResponse
+	10, // 18: spatialserver.v1.GameServer.NotifyEntityLeave:output_type -> spatialserver.v1.NotifyResponse
+	17, // 19: spatialserver.v1.GameServer.SendEntityUpdate:output_type -> spatialserver.v1.Ack
+	12, // 20: spatialserver.v1.GameServer.QueryEntities:output_type -> spatialserver.v1.QueryEntitiesResponse
+	1,  // 21: spatialserver.v1.GameServer.Relay:output_type -> spatialserver.v1.RelayPacket
+	13, // [13:22] is the sub-list for method output_type
+	4,  // [4:13] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_spatialserver_v1_game_server_proto_init() }
@@ -649,13 +853,14 @@ func file_spatialserver_v1_game_server_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spatialserver_v1_game_server_proto_rawDesc), len(file_spatialserver_v1_game_server_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   10,
+			NumEnums:      1,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_spatialserver_v1_game_server_proto_goTypes,
 		DependencyIndexes: file_spatialserver_v1_game_server_proto_depIdxs,
+		EnumInfos:         file_spatialserver_v1_game_server_proto_enumTypes,
 		MessageInfos:      file_spatialserver_v1_game_server_proto_msgTypes,
 	}.Build()
 	File_spatialserver_v1_game_server_proto = out.File
