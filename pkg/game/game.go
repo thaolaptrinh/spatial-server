@@ -247,9 +247,12 @@ func (g *Game) updateVisibility() {
 			if _, seen := state.visible[id]; !seen && id != e.ID {
 				other, ok := g.Entities[id]
 				if ok {
-					g.Outbox <- OutboundPacket{
+					select {
+					case g.Outbox <- OutboundPacket{
 						ClientID: string(e.ID),
 						Data:     encodeSpawn(other),
+					}:
+					default:
 					}
 				}
 			}
@@ -257,9 +260,12 @@ func (g *Game) updateVisibility() {
 
 		for id := range state.visible {
 			if _, still := currentSet[id]; !still {
-				g.Outbox <- OutboundPacket{
+				select {
+				case g.Outbox <- OutboundPacket{
 					ClientID: string(e.ID),
 					Data:     encodeDespawn(id),
+				}:
+				default:
 				}
 			}
 		}

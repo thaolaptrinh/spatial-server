@@ -272,6 +272,26 @@ func TestDispatch_DecodesPositionUpdateProto(t *testing.T) {
 	g.mu.Unlock()
 }
 
+func TestOutbox_DropOnFull(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	for i := 0; i < 4096; i++ {
+		select {
+		case g.Outbox <- OutboundPacket{ClientID: "c", Data: []byte("x")}:
+		default:
+			t.Log("buffer full at", i)
+		}
+	}
+
+	e1 := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e1.Position = types.Vector3{X: 0, Z: 0}
+	g.AddEntity(e1)
+	e2 := entity.New(types.EntityID("e2"), "avatar", types.RuntimeID("r1"))
+	e2.Position = types.Vector3{X: 5, Z: 5}
+	g.AddEntity(e2)
+
+	g.tick()
+}
+
 func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	e := entity.New(types.EntityID("npc1"), "npc", types.RuntimeID("r1"))
