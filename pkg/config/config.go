@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -56,7 +57,9 @@ func Load(files ...string) (*Config, error) {
 	}
 
 	if err := k.Load(env.Provider(prefix, delimiter, func(s string) string {
-		return s
+		s = strings.TrimPrefix(s, prefix)
+		s = strings.ToLower(s)
+		return strings.ReplaceAll(s, "__", ".")
 	}), nil); err != nil {
 		return nil, fmt.Errorf("load env config: %w", err)
 	}
