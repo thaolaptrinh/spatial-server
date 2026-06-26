@@ -33,7 +33,7 @@ Design principles:
 | Milestone | Scope | Independently testable |
 |-----------|-------|------------------------|
 | 1F.1 | Gateway: real WebSocket upgrade (nhooyr.io) + JWT validation + `session.Pool` | Client completes WSS handshake; invalid token rejected; conn closes cleanly |
-| 1F.2 | Game Server: implement `GameServer.Relay` — stream ↔ Inbox/Outbox bridge, drain goroutine, client→stream registry, entity lifecycle on connect/disconnect | gRPC test client sends RelayPacket → observed in Inbox; Outbox packet → received on stream |
+| 1F.2 | Game Server: implement `GameServer.Relay` — stream ↔ Inbox/Outbox bridge, drain goroutine, client→stream registry, CONNECT/DISCONNECT entity lifecycle | gRPC test client sends CONNECT → entity created; DATA → observed in Inbox; Outbox packet → received on stream; DISCONNECT → entity removed |
 | 1F.3 | Gateway ↔ Game Server wiring: LookupZone → dial → open Relay stream, dual pump WS↔stream | Integration test across gateway + room-service + game-server |
 | 1F.4 | `pkg/game` real protocol encode/decode + fix `dispatch` position parsing + drop-on-full send | Unit test: PositionUpdate packet moves entity + `aoi.Move`; spawn/move packets are valid protocol frames |
 
@@ -55,26 +55,43 @@ service GameServer {
   rpc Relay(stream RelayPacket) returns (stream RelayPacket);
 }
 message RelayPacket {
-  string client_id = 1;
-  bytes  payload   = 2;  // protocol.Encode output — opaque
+  string      client_id = 1;
+  Kind        kind      = 2;  // DATA = opaque payload; CONNECT/DISCONNECT = control
+  bytes       payload   = 3;  // protocol.Encode output (DATA only); empty otherwise
+  ConnectMeta meta      = 4;  // set on CONNECT only
+}
+message ConnectMeta {
+  string player_id  = 1;
+  string runtime_id = 2;
+  string zone_id    = 3;
+}
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_DATA        = 1;
+  KIND_CONNECT     = 2;
+  KIND_DISCONNECT  = 3;
 }
 ```
 
-Service implementation (consumer-defined interface, e.g. `pkg/gameserver`):
+Why the control plane: the gateway holds the JWT `Claims` (player_id/runtime_id) but the game server does not. A `CONNECT` (carrying `ConnectMeta`) lets the game server create a fully-formed entity; `DISCONNECT` prevents entity leaks. `DATA` payloads stay opaque end-to-end.
+
+Service implementation mirrors the existing `roomServiceServer` pattern (`apps/room-service/main.go`): a thin gRPC adapter struct (`gameServerServer`) in `apps/game-server/main.go` wrapping the core `pkg/game` logic — not a new package.
 
 - Per `client_id` seen on the stream: register a send channel in `clientStreams map[string]chan []byte`.
-- Entity lifecycle: on first packet for a `client_id` → `game.AddEntity(entity.New(...))` derived from the client identity; on stream close / context cancel → `game.RemoveEntity`.
-- Inbound pump: read `RelayPacket` → `game.Inbox <- InboundPacket{ClientID, payload}`.
+- Entity lifecycle: on `KIND_CONNECT` → `game.AddEntity(entity.New(EntityID(client_id), "avatar", RuntimeID(meta.runtime_id)))`; on `KIND_DISCONNECT` (or stream close / context cancel) → `game.RemoveEntity` + delete send channel.
+- Inbound pump: on `KIND_DATA` → `game.Inbox <- InboundPacket{ClientID, payload}`; ignore payload for CONNECT/DISCONNECT.
 - Outbound drain goroutine: `for pkt := range game.Outbox` → lookup `clientStreams[pkt.ClientID]` → non-blocking send to that client's send queue; queue full → drop + log.
-- Each client's send queue is drained by a goroutine writing `RelayPacket`s back on the shared stream (guarded by a write mutex — gRPC streams are not safe for concurrent writers).
+- Each client's send queue is drained by a goroutine writing `RelayPacket{client_id, KIND_DATA, payload}` back on the shared stream (guarded by a write mutex — gRPC streams are not safe for concurrent writers).
 
 ### 1F.3 — Gateway ↔ Game Server wiring
 
 - On WS connect: `room.LookupZone(Claims.ZoneID)` → game-server `host:port`.
 - Dial the game-server gRPC (pool/cache connections), open the `Relay` stream.
+- Emit `RelayPacket{client_id, KIND_CONNECT, meta: ConnectMeta{PlayerID, RuntimeID, ZoneID}}` first.
 - Dual pump:
-  - WS read → `RelayPacket{client_id, payload}` → `stream.Send`.
+  - WS read → `RelayPacket{client_id, KIND_DATA, payload}` → `stream.Send`.
   - `stream.Recv` → WS write.
+- On WS close → `RelayPacket{client_id, KIND_DISCONNECT}` → close stream.
 - If `LookupZone` returns no owner → `503` to the client (zone not yet assigned).
 
 ### 1F.4 — pkg/game real protocol + dispatch fix
