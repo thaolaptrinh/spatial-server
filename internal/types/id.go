@@ -17,3 +17,7 @@ func NewRuntimeID() RuntimeID {
 func NewZoneID(runtimeID RuntimeID, gridX, gridY int) ZoneID {
 	return ZoneID(fmt.Sprintf("%s:%d:%d", runtimeID, gridX, gridY))
 }
+
+func NewServerID() ServerID {
+	return ServerID(uuid.Must(uuid.NewV7()).String())
+}
