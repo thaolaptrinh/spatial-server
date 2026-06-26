@@ -164,7 +164,7 @@ demo:
 		echo "  attempt $$i/10..."; \
 		sleep 2; \
 	done
-	go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1
+	-go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1 || true
 	docker compose -f $(DOCKER_COMPOSE) down
 ```
 
