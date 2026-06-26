@@ -2,14 +2,16 @@ package game
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/pkg/aoi"
 	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
 	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+	v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -247,7 +249,7 @@ func (g *Game) updateVisibility() {
 				if ok {
 					g.Outbox <- OutboundPacket{
 						ClientID: string(e.ID),
-						Data:     []byte(fmt.Sprintf("spawn:%s", other.ID)),
+						Data:     encodeSpawn(other),
 					}
 				}
 			}
@@ -257,7 +259,7 @@ func (g *Game) updateVisibility() {
 			if _, still := currentSet[id]; !still {
 				g.Outbox <- OutboundPacket{
 					ClientID: string(e.ID),
-					Data:     []byte(fmt.Sprintf("despawn:%s", id)),
+					Data:     encodeDespawn(id),
 				}
 			}
 		}
@@ -268,16 +270,38 @@ func (g *Game) updateVisibility() {
 }
 
 func (g *Game) dispatch(pkt InboundPacket) {
-	if len(pkt.Data) < 3 {
+	id, payload, _, err := protocol.Decode(pkt.Data)
+	if err != nil {
 		return
 	}
-	packetID := (uint16(pkt.Data[1]) << 8) | uint16(pkt.Data[2])
-	if packetID == 0x03 { // PositionUpdate
-		for _, e := range g.Entities {
-			if string(e.ID) == pkt.ClientID {
-				g.aoi.Move(e.ID, e.Position)
-				break
-			}
+	if id == protocol.PacketIDPositionUpdate {
+		var upd v1.EntityUpdate
+		if err := proto.Unmarshal(payload, &upd); err != nil {
+			return
 		}
+		e, ok := g.Entities[types.EntityID(pkt.ClientID)]
+		if !ok {
+			return
+		}
+		e.Position.X = upd.GetPosition().GetX()
+		e.Position.Y = upd.GetPosition().GetY()
+		e.Position.Z = upd.GetPosition().GetZ()
+		g.aoi.Move(e.ID, e.Position)
 	}
+}
+
+func encodeSpawn(e *entity.Entity) []byte {
+	msg := &v1.EntitySnapshot{
+		EntityId: string(e.ID),
+		Type:     e.Type,
+		Position: &v1.Vector3{X: e.Position.X, Y: e.Position.Y, Z: e.Position.Z},
+	}
+	b, _ := proto.Marshal(msg)
+	return protocol.Encode(protocol.PacketIDEntitySpawn, b, false)
+}
+
+func encodeDespawn(id types.EntityID) []byte {
+	msg := &v1.EntityID{Id: string(id)}
+	b, _ := proto.Marshal(msg)
+	return protocol.Encode(protocol.PacketIDEntityDespawn, b, false)
 }

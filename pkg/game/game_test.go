@@ -10,7 +10,10 @@ import (
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
 	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+	v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestNewGame(t *testing.T) {
@@ -243,4 +246,60 @@ func TestEnqueueRemoveEntity_ExecutesOnTick(t *testing.T) {
 	cancel()
 
 	assert.Equal(t, 0, g.EntityCount())
+}
+
+func TestDispatch_DecodesPositionUpdateProto(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(50*time.Millisecond))
+	e := entity.New(types.EntityID("p1"), "avatar", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 0, Z: 0}
+	g.AddEntity(e)
+
+	newPos := &v1.Vector3{X: 100, Y: 0, Z: 200}
+	upd := &v1.EntityUpdate{EntityId: "p1", Position: newPos}
+	payload, _ := proto.Marshal(upd)
+	frame := protocol.Encode(protocol.PacketIDPositionUpdate, payload, false)
+
+	g.Inbox <- InboundPacket{ClientID: "p1", Data: frame}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(60 * time.Millisecond)
+	cancel()
+
+	g.mu.Lock()
+	assert.Equal(t, 100.0, e.Position.X)
+	assert.Equal(t, 200.0, e.Position.Z)
+	g.mu.Unlock()
+}
+
+func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	e := entity.New(types.EntityID("npc1"), "npc", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(e)
+
+	e2 := entity.New(types.EntityID("p1"), "avatar", types.RuntimeID("r1"))
+	e2.Position = types.Vector3{X: 55, Z: 55}
+	g.AddEntity(e2)
+
+	g.tick()
+
+	for len(g.Outbox) > 0 {
+		pkt := <-g.Outbox
+		id, payload, _, err := protocol.Decode(pkt.Data)
+		require.NoError(t, err)
+
+		if id == protocol.PacketIDEntitySpawn {
+			var snap v1.EntitySnapshot
+			err = proto.Unmarshal(payload, &snap)
+			require.NoError(t, err)
+			if snap.GetEntityId() == "npc1" {
+				assert.Equal(t, "npc", snap.GetType())
+				assert.Equal(t, 50.0, snap.GetPosition().GetX())
+				assert.Equal(t, 50.0, snap.GetPosition().GetZ())
+				return
+			}
+		}
+	}
+	t.Error("never received a spawn packet for npc1")
 }
