@@ -1,13 +1,27 @@
 package main
 
 import (
+	"context"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/thaolaptrinh/spatial-server/internal/types"
+	"github.com/thaolaptrinh/spatial-server/pkg/game"
+	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
+
+const bufSize = 1024 * 1024
 
 func moduleRoot(t *testing.T) string {
 	t.Helper()
@@ -96,4 +110,86 @@ func TestGameServerBinary_PortConflict(t *testing.T) {
 
 	cmd1.Process.Signal(os.Interrupt)
 	cmd1.Wait()
+}
+
+func bufDialer(lis *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
+	return func(ctx context.Context, s string) (net.Conn, error) {
+		return lis.Dial()
+	}
+}
+
+func newTestServer(t *testing.T) (*spatialserverv1.GameServer_RelayClient, *game.Game, *bufconn.Listener) {
+	t.Helper()
+	g := game.New(types.ServerID("test-gs"), game.WithTickRate(10*time.Millisecond))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = g.Run(ctx) }()
+
+	srv := grpc.NewServer()
+	gs := newGameServerServer(g)
+	spatialserverv1.RegisterGameServerServer(srv, gs)
+	lis := bufconn.Listen(bufSize)
+	go srv.Serve(lis) //nolint:errcheck
+	t.Cleanup(srv.Stop)
+
+	conn, err := grpc.DialContext(context.Background(), "bufnet",
+		grpc.WithContextDialer(bufDialer(lis)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	client := spatialserverv1.NewGameServerClient(conn)
+	stream, err := client.Relay(context.Background())
+	require.NoError(t, err)
+
+	return &stream, g, lis
+}
+
+func TestRelay_ConnectCreatesEntity(t *testing.T) {
+	streamPtr, g, _ := newTestServer(t)
+	stream := *streamPtr
+
+	meta := &spatialserverv1.ConnectMeta{PlayerId: "p1", RuntimeId: "r1", ZoneId: "z1"}
+	err := stream.Send(&spatialserverv1.RelayPacket{ClientId: "p1", Kind: spatialserverv1.Kind_KIND_CONNECT, Meta: meta})
+	require.NoError(t, err)
+
+	time.Sleep(30 * time.Millisecond)
+
+	assert.Equal(t, 1, g.EntityCount())
+}
+
+func TestRelay_DataPacketReachesInbox(t *testing.T) {
+	streamPtr, g, _ := newTestServer(t)
+	stream := *streamPtr
+
+	err := stream.Send(&spatialserverv1.RelayPacket{
+		ClientId: "c1",
+		Kind:     spatialserverv1.Kind_KIND_DATA,
+		Payload:  []byte{0x01, 0x02, 0x03},
+	})
+	require.NoError(t, err)
+
+	select {
+	case pkt := <-g.Inbox:
+		assert.Equal(t, "c1", pkt.ClientID)
+		assert.Equal(t, []byte{0x01, 0x02, 0x03}, pkt.Data)
+	case <-time.After(time.Second):
+		t.Fatal("inbox not populated")
+	}
+}
+
+func TestRelay_DisconnectRemovesEntity(t *testing.T) {
+	streamPtr, g, _ := newTestServer(t)
+	stream := *streamPtr
+
+	meta := &spatialserverv1.ConnectMeta{PlayerId: "p2", RuntimeId: "r1", ZoneId: "z1"}
+	err := stream.Send(&spatialserverv1.RelayPacket{ClientId: "p2", Kind: spatialserverv1.Kind_KIND_CONNECT, Meta: meta})
+	require.NoError(t, err)
+	time.Sleep(30 * time.Millisecond)
+	assert.Equal(t, 1, g.EntityCount())
+
+	err = stream.Send(&spatialserverv1.RelayPacket{ClientId: "p2", Kind: spatialserverv1.Kind_KIND_DISCONNECT})
+	require.NoError(t, err)
+	time.Sleep(30 * time.Millisecond)
+	assert.Equal(t, 0, g.EntityCount())
 }
