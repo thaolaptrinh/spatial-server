@@ -97,14 +97,16 @@ Service implementation mirrors the existing `roomServiceServer` pattern (`apps/r
 
 ### 1F.4 — pkg/game real protocol + dispatch fix
 
-- Replace ad-hoc `fmt.Sprintf` packet builders with `protocol.Encode(PacketIDEntitySpawn, payload, true)`, etc.
-- Payload schema — define and document (little-endian):
-  - `PositionUpdate` payload = 3×float64 (x, y, z), 24 bytes.
-  - `EntitySpawn` payload = `entityID` (uint16 length-prefix + bytes) + `type` (uint16 length-prefix + bytes) + `Vector3` (3×float64).
-  - `EntityDespawn` payload = `entityID` (uint16 length-prefix + bytes).
-  - `EntityMove` payload = `entityID` (uint16 length-prefix + bytes) + `Vector3` (3×float64).
-- Fix `dispatch`: decode `PositionUpdate` → update `e.Position` → `g.aoi.Move(e.ID, e.Position)`. (Current bug calls `Move` with the pre-update position.)
+- Payloads use **protobuf**, per [ADR-010](../../adr/010-packet-protocol.md) ("Payload = protobuf bytes"). Reuse existing `common.proto` messages — **no new payload schema**:
+  - `PositionUpdate` (0x03) → `EntityUpdate` (entity_id, position, sequence, timestamp)
+  - `EntitySpawn` (0x04) → `EntitySnapshot` (entity_id, type, position, attributes)
+  - `EntityDespawn` (0x05) → `EntityID`
+  - `EntityMove` (0x06) → `EntityUpdate`
+- Replace ad-hoc `fmt.Sprintf` packet builders with `protocol.Encode(id, proto.Marshal(msg), compress)`.
+- Fix `dispatch`: `proto.Unmarshal` the `PositionUpdate` payload → update `e.Position` from `EntityUpdate.Position` → `g.aoi.Move(e.ID, e.Position)`. (Current bug calls `Move` with the pre-update position.)
 - Drop-on-full send: `select { case Outbox <- pkt: default: log drop }` so a stalled drain can never freeze the tick loop.
+
+> Out of scope: `pkg/protocol.go`'s current 3-byte header deviates from ADR-010's 9-byte header (missing version / message type / sequence). Aligning the frame to the ADR is a separate follow-up; Phase 1F honours the **protobuf payload** decision but keeps the existing frame.
 
 ### Concurrency model (critical)
 
@@ -149,7 +151,7 @@ This avoids broad locking and preserves the existing (already inconsistent) `g.m
 - Entity lifecycle mutations are race-free: `go test ./pkg/game/... -race` passes with concurrent Relay-driven `AddEntity`/`RemoveEntity`.
 - `game.Outbox` is drained (the game loop never blocks on send).
 - A `PositionUpdate` packet moves the entity and updates AOI.
-- Spawn/move/despawn outbound packets are valid `protocol.Encode` frames.
+- Spawn/move/despawn outbound packets are valid `protocol.Encode` frames with **protobuf payloads** (per ADR-010).
 - End-to-end integration test (gateway + room-service + game-server) passes.
 - All existing unit tests still pass; lint clean.
 
