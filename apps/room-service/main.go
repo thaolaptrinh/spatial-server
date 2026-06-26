@@ -13,14 +13,59 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 
 	"github.com/thaolaptrinh/spatial-server/internal/migration"
+	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
+	"github.com/thaolaptrinh/spatial-server/pkg/room"
 	"github.com/thaolaptrinh/spatial-server/pkg/storage"
+	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
+
+type roomServiceServer struct {
+	spatialserverv1.UnimplementedRoomServiceServer
+	registry  *room.ServerRegistry
+	ownership *room.ZoneOwnership
+}
+
+func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.RegisterRequest) (*spatialserverv1.RegisterResponse, error) {
+	err := s.registry.Register(&room.ServerInfo{
+		ID:       types.ServerID(req.ServerId),
+		Host:     req.Host,
+		Port:     int(req.Port),
+		Status:   types.ServerStatusJoining,
+		MaxZones: int(req.MaxZones),
+	})
+	if err != nil {
+		return &spatialserverv1.RegisterResponse{Success: false}, nil
+	}
+	return &spatialserverv1.RegisterResponse{Success: true}, nil
+}
+
+func (s *roomServiceServer) Heartbeat(ctx context.Context, req *spatialserverv1.HeartbeatRequest) (*spatialserverv1.HeartbeatResponse, error) {
+	err := s.registry.Heartbeat(types.ServerID(req.ServerId))
+	if err != nil {
+		return &spatialserverv1.HeartbeatResponse{Acknowledged: false}, nil
+	}
+	return &spatialserverv1.HeartbeatResponse{Acknowledged: true}, nil
+}
+
+func (s *roomServiceServer) LookupZone(ctx context.Context, req *spatialserverv1.LookupZoneRequest) (*spatialserverv1.LookupZoneResponse, error) {
+	serverID, host, port, err := room.ResolveZone(s.ownership, s.registry, req.ZoneId)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "zone %s: %v", req.ZoneId, err)
+	}
+	return &spatialserverv1.LookupZoneResponse{
+		Server: &spatialserverv1.ServerID{Id: string(serverID)},
+		Host:   host,
+		Port:   int32(port),
+	}, nil
+}
 
 func main() {
 	k := koanf.New(".")
@@ -71,6 +116,11 @@ func main() {
 	srv := grpc.NewServer()
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
 	reflection.Register(srv)
+
+	registry := room.NewServerRegistry()
+	ownership := room.NewZoneOwnership()
+	service := &roomServiceServer{registry: registry, ownership: ownership}
+	spatialserverv1.RegisterRoomServiceServer(srv, service)
 
 	go func() {
 		logger.Info("room-service starting", slog.Int("port", gRPCPort))
