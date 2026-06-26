@@ -3,6 +3,9 @@ docs/superpowers/
 
 # Binaries
 /apps/*/bin/
+/game-server
+/gateway
+/room-service
 /tmp/
 
 # IDE
