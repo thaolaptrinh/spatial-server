@@ -16,3 +16,6 @@ postgres:
 
 redis:
   addr: "localhost:6379"
+
+gateway:
+  jwt_secret: "dev-secret-key-change-in-production"

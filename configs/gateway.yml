@@ -13,7 +13,10 @@ grpc:
 
 gateway:
   ws_port: 8080
-  jwt_secret: "dev-secret-change-in-production"
+  jwt_secret: "dev-secret-key-change-in-production"
+
+room_service:
+  addr: "room-service:9000"
 
 redis:
   addr: "localhost:6379"
