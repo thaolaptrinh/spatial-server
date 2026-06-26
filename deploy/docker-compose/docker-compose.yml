@@ -59,9 +59,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - room-service
-      - redis:
-          condition: service_healthy
+      room-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
     environment:
       SPATIAL_GATEWAY__WS_PORT: "8080"
       SPATIAL_GATEWAY__JWT_SECRET: "dev-secret-key-change-in-production"
