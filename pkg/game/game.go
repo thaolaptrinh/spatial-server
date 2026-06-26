@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
@@ -33,6 +34,13 @@ type entityAOIState struct {
 	lastPosition types.Vector3
 }
 
+type ghostEntry struct {
+	entityID  types.EntityID
+	position  types.Vector3
+	createdAt time.Time
+	expiresAt time.Time
+}
+
 type Game struct {
 	ServerID  types.ServerID
 	Entities  map[types.EntityID]*entity.Entity
@@ -43,6 +51,9 @@ type Game struct {
 	aoiRadius float64
 	tickRate  time.Duration
 	entityAOI map[types.EntityID]*entityAOIState
+	ghosts    map[types.EntityID]*ghostEntry
+	ghostTTL  time.Duration
+	mu        sync.Mutex
 }
 
 type Option func(*Game)
@@ -62,6 +73,8 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		aoiRadius: DefaultAOIRadius,
 		tickRate:  DefaultTickRate,
 		entityAOI: make(map[types.EntityID]*entityAOIState),
+		ghosts:    make(map[types.EntityID]*ghostEntry),
+		ghostTTL:  5 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -72,6 +85,10 @@ func New(sid types.ServerID, opts ...Option) *Game {
 func (g *Game) AddEntity(e *entity.Entity) {
 	g.Entities[e.ID] = e
 	g.aoi.Enter(e.ID, e.Position)
+	g.entityAOI[e.ID] = &entityAOIState{
+		visible:      make(map[types.EntityID]struct{}),
+		lastPosition: e.Position,
+	}
 }
 
 func (g *Game) RemoveEntity(id types.EntityID) {
@@ -110,10 +127,55 @@ func (g *Game) tick() {
 		case pkt := <-g.Inbox:
 			g.dispatch(pkt)
 		default:
+			g.detectZoneBoundaries()
 			g.updateVisibility()
+			g.sweepGhosts()
 			return
 		}
 	}
+}
+
+func (g *Game) detectZoneBoundaries() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for id := range g.Entities {
+		e := g.Entities[id]
+		state, exists := g.entityAOI[id]
+		if !exists {
+			continue
+		}
+		oldCellX, oldCellY := g.aoi.CellCoord(state.lastPosition)
+		currentCellX, currentCellY := g.aoi.CellCoord(e.Position)
+		if oldCellX == currentCellX && oldCellY == currentCellY {
+			continue
+		}
+		ghostID := types.EntityID(string(id) + "_ghost")
+		g.ghosts[ghostID] = &ghostEntry{
+			entityID:  id,
+			position:  state.lastPosition,
+			createdAt: time.Now(),
+			expiresAt: time.Now().Add(g.ghostTTL),
+		}
+		g.aoi.Enter(ghostID, state.lastPosition)
+	}
+}
+
+func (g *Game) sweepGhosts() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := time.Now()
+	for id, ghost := range g.ghosts {
+		if now.After(ghost.expiresAt) {
+			g.aoi.Leave(id)
+			delete(g.ghosts, id)
+		}
+	}
+}
+
+func (g *Game) GhostCount() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.ghosts)
 }
 
 func (g *Game) updateVisibility() {

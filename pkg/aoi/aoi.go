@@ -120,6 +120,11 @@ func (a *AOI) EntitiesInRange(center types.Vector3, radius float64) []types.Enti
 	return result
 }
 
+func (a *AOI) CellCoord(pos types.Vector3) (int, int) {
+	ck := a.cellKeyFor(pos)
+	return ck.x, ck.y
+}
+
 func (a *AOI) Count() int {
 	return len(a.positions)
 }

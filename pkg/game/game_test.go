@@ -92,6 +92,40 @@ func TestRun_Lifecycle(t *testing.T) {
 	}
 }
 
+func TestGhostEntity_CreatedOnZoneBoundary(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(e)
+
+	e.Position = types.Vector3{X: 150, Z: 150}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	assert.Greater(t, g.GhostCount(), 0, "expected at least one ghost after zone cross")
+}
+
+func TestGhostEntity_ExpiresAfterTTL(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	g.ghostTTL = 50 * time.Millisecond
+
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(e)
+
+	e.Position = types.Vector3{X: 150, Z: 150}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	assert.Equal(t, 0, g.GhostCount(), "ghosts should be cleaned up after TTL")
+}
+
 func TestAOI_AddEntityRegistersInAOI(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
