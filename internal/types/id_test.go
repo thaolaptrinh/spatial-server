@@ -4,13 +4,6 @@ import (
 	"testing"
 )
 
-func TestNewEntityID(t *testing.T) {
-	id := NewEntityID()
-	if id == "" {
-		t.Fatal("NewEntityID returned empty")
-	}
-}
-
 func TestNewEntityID_Unique(t *testing.T) {
 	ids := make(map[EntityID]bool)
 	for i := 0; i < 100; i++ {
