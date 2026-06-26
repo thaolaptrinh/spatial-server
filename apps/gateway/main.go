@@ -13,10 +13,26 @@ import (
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 
 	"github.com/thaolaptrinh/spatial-server/pkg/gateway"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
 )
+
+type roomLookuper struct {
+	client spatialserverv1.RoomServiceClient
+}
+
+func (r *roomLookuper) LookupZone(ctx context.Context, zoneID string) (string, int32, error) {
+	resp, err := r.client.LookupZone(ctx, &spatialserverv1.LookupZoneRequest{ZoneId: zoneID})
+	if err != nil {
+		return "", 0, err
+	}
+	return resp.GetHost(), resp.GetPort(), nil
+}
 
 func main() {
 	k := koanf.New(".")
@@ -32,8 +48,25 @@ func main() {
 	logger := logging.NewDefault(k.String("service.name"))
 
 	wsPort := k.Int("gateway.ws_port")
+
+	// Dial room-service for zone lookups
+	roomServiceAddr := k.String("room_service.addr")
+	rsConn, err := grpc.NewClient(roomServiceAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		logger.Error("connect to room service", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer rsConn.Close()
+	rsClient := spatialserverv1.NewRoomServiceClient(rsConn)
+
+	// Wrap room-service as a ZoneLookuper
+	lookuper := &roomLookuper{client: rsClient}
+
+	jwtSecret := k.String("gateway.jwt_secret")
 	cache := gateway.NewRouterCache(5 * time.Second)
-	handler := gateway.NewHandler(cache, nil, nil)
+	handler := gateway.NewHandler(cache, lookuper, []byte(jwtSecret))
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", wsPort),
