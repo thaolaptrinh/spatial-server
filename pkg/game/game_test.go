@@ -216,3 +216,31 @@ func TestTick_EntityFarAwayNoSpawn(t *testing.T) {
 	visible := g.aoi.EntitiesInRange(types.Vector3{X: 0, Z: 0}, 300)
 	assert.NotContains(t, visible, types.EntityID("b"))
 }
+
+func TestEnqueueAddEntity_ExecutesOnTick(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	g.EnqueueAddEntity(entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1")))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	assert.Equal(t, 1, g.EntityCount())
+}
+
+func TestEnqueueRemoveEntity_ExecutesOnTick(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	g.AddEntity(e)
+	assert.Equal(t, 1, g.EntityCount())
+
+	g.EnqueueRemoveEntity(types.EntityID("e1"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	assert.Equal(t, 0, g.EntityCount())
+}

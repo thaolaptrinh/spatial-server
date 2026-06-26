@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	DefaultTickRate  = 50 * time.Millisecond
-	InboxBufferSize  = 4096
-	DefaultCellSize  = 100.0
-	DefaultAOIRadius = 300.0
+	DefaultTickRate   = 50 * time.Millisecond
+	InboxBufferSize   = 4096
+	DefaultCellSize   = 100.0
+	DefaultAOIRadius  = 300.0
+	cmdChannelBuffer  = 256
 )
 
 type InboundPacket struct {
@@ -53,6 +54,7 @@ type Game struct {
 	entityAOI map[types.EntityID]*entityAOIState
 	ghosts    map[types.EntityID]*ghostEntry
 	ghostTTL  time.Duration
+	cmds      chan func()
 	mu        sync.Mutex
 }
 
@@ -75,6 +77,7 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		entityAOI: make(map[types.EntityID]*entityAOIState),
 		ghosts:    make(map[types.EntityID]*ghostEntry),
 		ghostTTL:  5 * time.Second,
+		cmds:     make(chan func(), cmdChannelBuffer),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -82,21 +85,35 @@ func New(sid types.ServerID, opts ...Option) *Game {
 	return g
 }
 
-func (g *Game) AddEntity(e *entity.Entity) {
+func (g *Game) addEntity(e *entity.Entity) {
+	g.mu.Lock()
 	g.Entities[e.ID] = e
 	g.aoi.Enter(e.ID, e.Position)
 	g.entityAOI[e.ID] = &entityAOIState{
 		visible:      make(map[types.EntityID]struct{}),
 		lastPosition: e.Position,
 	}
+	g.mu.Unlock()
+}
+
+func (g *Game) AddEntity(e *entity.Entity) {
+	g.addEntity(e)
+}
+
+func (g *Game) removeEntity(id types.EntityID) {
+	g.mu.Lock()
+	g.aoi.Leave(id)
+	delete(g.Entities, id)
+	g.mu.Unlock()
 }
 
 func (g *Game) RemoveEntity(id types.EntityID) {
-	g.aoi.Leave(id)
-	delete(g.Entities, id)
+	g.removeEntity(id)
 }
 
 func (g *Game) EntityCount() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	return len(g.Entities)
 }
 
@@ -121,7 +138,33 @@ func (g *Game) Run(ctx context.Context) error {
 	}
 }
 
+func (g *Game) EnqueueAddEntity(e *entity.Entity) {
+	select {
+	case g.cmds <- func() { g.addEntity(e) }:
+	default:
+	}
+}
+
+func (g *Game) EnqueueRemoveEntity(id types.EntityID) {
+	select {
+	case g.cmds <- func() { g.removeEntity(id) }:
+	default:
+	}
+}
+
+func (g *Game) applyCmds() {
+	for i := 0; i < cmdChannelBuffer; i++ {
+		select {
+		case cmd := <-g.cmds:
+			cmd()
+		default:
+			return
+		}
+	}
+}
+
 func (g *Game) tick() {
+	g.applyCmds()
 	for {
 		select {
 		case pkt := <-g.Inbox:
