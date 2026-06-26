@@ -64,4 +64,19 @@ docker-build:
 	docker build -f build/docker/room-service.Dockerfile -t spatial-room-service .
 	docker build -f build/docker/game-server.Dockerfile -t spatial-game-server .
 
-.PHONY: docker-build
+# Start demo environment with a test client
+demo:
+	@trap 'docker compose -f deploy/docker-compose/docker-compose.yml down' EXIT; \
+	docker compose -f deploy/docker-compose/docker-compose.yml up -d --build; \
+	echo "Waiting for gateway..."; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if curl -sf http://localhost:8080/health > /dev/null 2>&1; then \
+			echo "Gateway ready!"; \
+			break; \
+		fi; \
+		echo "  attempt $$i/10..."; \
+		sleep 2; \
+	done; \
+	go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1
+
+.PHONY: docker-build demo
