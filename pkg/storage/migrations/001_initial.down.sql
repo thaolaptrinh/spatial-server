@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS zones;
+DROP TABLE IF EXISTS runtimes;
+DROP TABLE IF EXISTS game_servers;
