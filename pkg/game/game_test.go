@@ -125,3 +125,60 @@ func TestRun_TickProcessesInbox(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	cancel()
 }
+
+func TestTick_EntityInRangeSpawns(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	eA := entity.New(types.EntityID("a"), "avatar", types.RuntimeID("r1"))
+	eA.Position = types.Vector3{X: 0, Z: 0}
+	g.AddEntity(eA)
+	eB := entity.New(types.EntityID("b"), "avatar", types.RuntimeID("r1"))
+	eB.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(eB)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	drain := make(chan OutboundPacket, 100)
+	go func() {
+		for {
+			select {
+			case pkt := <-g.Outbox:
+				drain <- pkt
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go g.Run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	var foundSpawn bool
+	for {
+		select {
+		case pkt := <-drain:
+			if pkt.ClientID == "a" && len(pkt.Data) > 0 {
+				foundSpawn = true
+			}
+		case <-time.After(100 * time.Millisecond):
+			assert.True(t, foundSpawn, "entity a should receive spawn for entity b")
+			return
+		}
+	}
+}
+
+func TestTick_EntityFarAwayNoSpawn(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	eA := entity.New(types.EntityID("a"), "avatar", types.RuntimeID("r1"))
+	eA.Position = types.Vector3{X: 0, Z: 0}
+	g.AddEntity(eA)
+	eB := entity.New(types.EntityID("b"), "avatar", types.RuntimeID("r1"))
+	eB.Position = types.Vector3{X: 50000, Z: 50000}
+	g.AddEntity(eB)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go g.Run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	visible := g.aoi.EntitiesInRange(types.Vector3{X: 0, Z: 0}, 300)
+	assert.NotContains(t, visible, types.EntityID("b"))
+}

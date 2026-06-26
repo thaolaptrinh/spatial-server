@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
@@ -27,6 +28,11 @@ type OutboundPacket struct {
 	Data     []byte
 }
 
+type entityAOIState struct {
+	visible      map[types.EntityID]struct{}
+	lastPosition types.Vector3
+}
+
 type Game struct {
 	ServerID  types.ServerID
 	Entities  map[types.EntityID]*entity.Entity
@@ -36,6 +42,7 @@ type Game struct {
 	aoi       *aoi.AOI
 	aoiRadius float64
 	tickRate  time.Duration
+	entityAOI map[types.EntityID]*entityAOIState
 }
 
 type Option func(*Game)
@@ -54,6 +61,7 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		aoi:       aoi.New(DefaultCellSize, DefaultAOIRadius),
 		aoiRadius: DefaultAOIRadius,
 		tickRate:  DefaultTickRate,
+		entityAOI: make(map[types.EntityID]*entityAOIState),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -102,11 +110,69 @@ func (g *Game) tick() {
 		case pkt := <-g.Inbox:
 			g.dispatch(pkt)
 		default:
+			g.updateVisibility()
 			return
 		}
 	}
 }
 
+func (g *Game) updateVisibility() {
+	if g.entityAOI == nil {
+		return
+	}
+	for _, e := range g.Entities {
+		current := g.aoi.EntitiesInRange(e.Position, g.aoiRadius)
+		currentSet := make(map[types.EntityID]struct{}, len(current))
+		for _, id := range current {
+			currentSet[id] = struct{}{}
+		}
+
+		state, exists := g.entityAOI[e.ID]
+		if !exists {
+			state = &entityAOIState{
+				visible:      make(map[types.EntityID]struct{}),
+				lastPosition: e.Position,
+			}
+			g.entityAOI[e.ID] = state
+		}
+
+		for id := range currentSet {
+			if _, seen := state.visible[id]; !seen && id != e.ID {
+				other, ok := g.Entities[id]
+				if ok {
+					g.Outbox <- OutboundPacket{
+						ClientID: string(e.ID),
+						Data:     []byte(fmt.Sprintf("spawn:%s", other.ID)),
+					}
+				}
+			}
+		}
+
+		for id := range state.visible {
+			if _, still := currentSet[id]; !still {
+				g.Outbox <- OutboundPacket{
+					ClientID: string(e.ID),
+					Data:     []byte(fmt.Sprintf("despawn:%s", id)),
+				}
+			}
+		}
+
+		state.visible = currentSet
+		state.lastPosition = e.Position
+	}
+}
+
 func (g *Game) dispatch(pkt InboundPacket) {
-	_ = pkt
+	if len(pkt.Data) < 3 {
+		return
+	}
+	packetID := (uint16(pkt.Data[1]) << 8) | uint16(pkt.Data[2])
+	if packetID == 0x03 { // PositionUpdate
+		for _, e := range g.Entities {
+			if string(e.ID) == pkt.ClientID {
+				g.aoi.Move(e.ID, e.Position)
+				break
+			}
+		}
+	}
 }
