@@ -49,6 +49,7 @@ services:
     depends_on:
       - room-service
     environment:
+      SPATIAL_GRPC__HOST: "game-server"
       SPATIAL_GRPC__PORT: "9000"
 
   gateway:
@@ -63,7 +64,7 @@ services:
           condition: service_healthy
     environment:
       SPATIAL_GATEWAY__WS_PORT: "8080"
-      SPATIAL_GATEWAY__JWT_SECRET: "dev-secret-change-in-production"
+      SPATIAL_GATEWAY__JWT_SECRET: "dev-secret-key-change-in-production"
       SPATIAL_REDIS__ADDR: "redis:6379"
 
 volumes:
