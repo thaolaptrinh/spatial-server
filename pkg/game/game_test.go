@@ -92,6 +92,27 @@ func TestRun_Lifecycle(t *testing.T) {
 	}
 }
 
+func TestAOI_AddEntityRegistersInAOI(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 10, Z: 10}
+	g.AddEntity(e)
+
+	visible := g.aoi.EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
+	assert.Contains(t, visible, types.EntityID("e1"))
+}
+
+func TestAOI_RemoveEntityRemovesFromAOI(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.Position = types.Vector3{X: 10, Z: 10}
+	g.AddEntity(e)
+	g.RemoveEntity(types.EntityID("e1"))
+
+	visible := g.aoi.EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
+	assert.NotContains(t, visible, types.EntityID("e1"))
+}
+
 func TestRun_TickProcessesInbox(t *testing.T) {
 	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
 	g.AddEntity(entity.New(types.EntityID("target"), "avatar", types.RuntimeID("r1")))
