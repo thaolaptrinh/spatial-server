@@ -1,9 +1,11 @@
 package session
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 )
 
@@ -49,13 +51,26 @@ func TestPool_GetMissing(t *testing.T) {
 
 func TestPool_ConcurrentSafe(t *testing.T) {
 	pool := NewPool()
+	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
-		pool.Add(NewSession(string(rune(i)), "p", types.ZoneID("z"), types.ServerID("gs")))
+		wg.Add(1)
+		i := i
+		go func() {
+			defer wg.Done()
+			pool.Add(NewSession(string(rune(i)), "p", types.ZoneID("z"), types.ServerID("gs")))
+		}()
 	}
+	wg.Wait()
 	assert.Equal(t, 100, pool.Count())
 
 	for i := 0; i < 50; i++ {
-		pool.Remove(string(rune(i)))
+		wg.Add(1)
+		i := i
+		go func() {
+			defer wg.Done()
+			pool.Remove(string(rune(i)))
+		}()
 	}
+	wg.Wait()
 	assert.Equal(t, 50, pool.Count())
 }
