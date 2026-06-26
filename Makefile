@@ -67,7 +67,7 @@ docker-build:
 # Start demo environment with a test client
 demo:
 	@trap 'docker compose -f deploy/docker-compose/docker-compose.yml down' EXIT; \
-	docker compose -f deploy/docker-compose/docker-compose.yml up -d --build; \
+	docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --force-recreate; \
 	echo "Waiting for gateway..."; \
 	for i in 1 2 3 4 5 6 7 8 9 10; do \
 		if curl -sf http://localhost:8080/health > /dev/null 2>&1; then \
@@ -77,6 +77,13 @@ demo:
 		echo "  attempt $$i/10..."; \
 		sleep 2; \
 	done; \
-	go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1
+	for i in 1 2 3 4 5; do \
+		echo "Starting client (attempt $$i)"; \
+		if go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1; then \
+			break; \
+		fi; \
+		echo "  client failed, retrying in 3s..."; \
+		sleep 3; \
+	done
 
 .PHONY: docker-build demo

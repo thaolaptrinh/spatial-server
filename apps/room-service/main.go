@@ -7,9 +7,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"google.golang.org/grpc"
@@ -58,7 +60,18 @@ func (s *roomServiceServer) Heartbeat(ctx context.Context, req *spatialserverv1.
 func (s *roomServiceServer) LookupZone(ctx context.Context, req *spatialserverv1.LookupZoneRequest) (*spatialserverv1.LookupZoneResponse, error) {
 	serverID, host, port, err := room.ResolveZone(s.ownership, s.registry, req.ZoneId)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "zone %s: %v", req.ZoneId, err)
+		server, ok := s.registry.LeastLoaded()
+		if !ok {
+			return nil, status.Errorf(codes.Unavailable, "no servers available for zone %s", req.ZoneId)
+		}
+		if err := s.ownership.Claim(req.ZoneId, server.ID); err != nil {
+			return nil, status.Errorf(codes.Internal, "claim zone %s: %v", req.ZoneId, err)
+		}
+		return &spatialserverv1.LookupZoneResponse{
+			Server: &spatialserverv1.ServerID{Id: string(server.ID)},
+			Host:   server.Host,
+			Port:   int32(server.Port),
+		}, nil
 	}
 	return &spatialserverv1.LookupZoneResponse{
 		Server: &spatialserverv1.ServerID{Id: string(serverID)},
@@ -75,6 +88,12 @@ func main() {
 	}
 	if err := k.Load(file.Provider("configs/room-service.yml"), yaml.Parser()); err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := k.Load(env.Provider("SPATIAL_", ".", func(s string) string {
+		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "SPATIAL_")), "__", ".", -1)
+	}), nil); err != nil {
+		fmt.Fprintf(os.Stderr, "load env: %v\n", err)
 		os.Exit(1)
 	}
 

@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"google.golang.org/grpc"
@@ -42,6 +44,12 @@ func main() {
 	}
 	if err := k.Load(file.Provider("configs/gateway.yml"), yaml.Parser()); err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := k.Load(env.Provider("SPATIAL_", ".", func(s string) string {
+		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "SPATIAL_")), "__", ".", -1)
+	}), nil); err != nil {
+		fmt.Fprintf(os.Stderr, "load env: %v\n", err)
 		os.Exit(1)
 	}
 
