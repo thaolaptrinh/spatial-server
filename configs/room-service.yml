@@ -1,0 +1,22 @@
+service:
+  name: room-service
+  instance: "1"
+  debug: false
+
+logging:
+  level: info
+  json: true
+
+grpc:
+  host: "0.0.0.0"
+  port: 9000
+
+postgres:
+  dsn: "postgres://spatial:spatial@localhost:5432/spatial?sslmode=disable"
+
+redis:
+  addr: "localhost:6379"
+
+room:
+  heartbeat_timeout: 30s
+  heartbeat_interval: 5s

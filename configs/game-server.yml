@@ -1,0 +1,18 @@
+service:
+  name: game-server
+  instance: "1"
+  debug: false
+
+logging:
+  level: info
+  json: true
+
+grpc:
+  host: "0.0.0.0"
+  port: 9000
+
+game:
+  tick_rate: 50ms
+  max_entities: 10000
+  zone_cell_size: 100
+  aoi_radius: 300

@@ -1,0 +1,19 @@
+service:
+  name: gateway
+  instance: "1"
+  debug: false
+
+logging:
+  level: info
+  json: true
+
+grpc:
+  host: "0.0.0.0"
+  port: 9000
+
+gateway:
+  ws_port: 8080
+  jwt_secret: "dev-secret-change-in-production"
+
+redis:
+  addr: "localhost:6379"
