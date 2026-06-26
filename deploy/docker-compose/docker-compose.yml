@@ -27,5 +27,44 @@ services:
       timeout: 3s
       retries: 5
 
+  room-service:
+    build:
+      context: ../..
+      dockerfile: build/docker/room-service.Dockerfile
+    ports:
+      - "9001:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPATIAL_POSTGRES__DSN: "postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable"
+      SPATIAL_REDIS__ADDR: "redis:6379"
+
+  game-server:
+    build:
+      context: ../..
+      dockerfile: build/docker/game-server.Dockerfile
+    depends_on:
+      - room-service
+    environment:
+      SPATIAL_GRPC__PORT: "9000"
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: build/docker/gateway.Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - room-service
+      - redis:
+          condition: service_healthy
+    environment:
+      SPATIAL_GATEWAY__WS_PORT: "8080"
+      SPATIAL_GATEWAY__JWT_SECRET: "dev-secret-change-in-production"
+      SPATIAL_REDIS__ADDR: "redis:6379"
+
 volumes:
   pgdata:

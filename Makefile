@@ -57,3 +57,11 @@ fmt:
 deps:
 	go get -u ./...
 	go mod tidy
+
+# Build Docker images for all services
+docker-build:
+	docker build -f build/docker/gateway.Dockerfile -t spatial-gateway .
+	docker build -f build/docker/room-service.Dockerfile -t spatial-room-service .
+	docker build -f build/docker/game-server.Dockerfile -t spatial-game-server .
+
+.PHONY: docker-build
