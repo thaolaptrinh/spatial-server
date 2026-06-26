@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
+	"github.com/thaolaptrinh/spatial-server/pkg/game"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
@@ -99,18 +100,12 @@ func main() {
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
 	reflection.Register(srv)
 
-	tickCtx, tickCancel := context.WithCancel(context.Background())
+	gameCtx, gameCancel := context.WithCancel(context.Background())
+	gs := game.New(serverID, game.WithTickRate(tickRate))
 	go func() {
-		logger.Info("ticker starting", slog.String("rate", tickRateStr))
-		t := time.NewTicker(tickRate)
-		defer t.Stop()
-		for {
-			select {
-			case <-tickCtx.Done():
-				logger.Info("ticker stopped")
-				return
-			case <-t.C:
-			}
+		logger.Info("game loop starting", slog.String("tick", tickRateStr))
+		if err := gs.Run(gameCtx); err != nil && err != context.Canceled {
+			logger.Error("game loop exited", slog.String("error", err.Error()))
 		}
 	}()
 
@@ -126,7 +121,7 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	logger.Info("game-server shutting down")
-	tickCancel()
+	gameCancel()
 	heartbeatCancel()
 	srv.GracefulStop()
 	logger.Info("game-server stopped")
