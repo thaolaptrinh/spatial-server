@@ -1,0 +1,29 @@
+/references/
+
+# Binaries
+/apps/*/bin/
+/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.out
+*.test
+*.test.exe
+
+# Environment
+.env
+.env.local
+*.env
+
+# Dependencies
+/vendor/
+

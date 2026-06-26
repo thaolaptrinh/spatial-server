@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package spatialserver.v1;
+
+option go_package = "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1";
+
+service Gateway {
+}

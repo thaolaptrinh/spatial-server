@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package spatialserver.v1;
+
+option go_package = "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1";
+
+import "spatialserver/v1/common.proto";
+
+service GameServer {
+  rpc AssignZone(AssignZoneRequest) returns (AssignZoneResponse);
+  rpc ReleaseZone(ReleaseZoneRequest) returns (ReleaseZoneResponse);
+  rpc MigrateEntity(MigrateEntityRequest) returns (MigrateEntityResponse);
+  rpc ZoneStateSync(stream spatialserver.v1.ZoneSnapshot) returns (ZoneStateSyncResponse);
+  rpc NotifyEntityEnter(spatialserver.v1.EntityEnterLeave) returns (NotifyResponse);
+  rpc NotifyEntityLeave(spatialserver.v1.EntityEnterLeave) returns (NotifyResponse);
+  rpc SendEntityUpdate(spatialserver.v1.EntityUpdate) returns (spatialserver.v1.Ack);
+  rpc QueryEntities(QueryEntitiesRequest) returns (QueryEntitiesResponse);
+}
+
+message AssignZoneRequest {
+  string zone_id = 1;
+  string runtime_id = 2;
+  int32 grid_x = 3;
+  int32 grid_y = 4;
+  double zone_size = 5;
+}
+
+message AssignZoneResponse {
+  bool success = 1;
+}
+
+message ReleaseZoneRequest {
+  string zone_id = 1;
+  string runtime_id = 2;
+}
+
+message ReleaseZoneResponse {
+  bool success = 1;
+}
+
+message MigrateEntityRequest {
+  spatialserver.v1.EntitySnapshot entity = 1;
+  string target_zone_id = 2;
+}
+
+message MigrateEntityResponse {
+  bool success = 1;
+}
+
+message ZoneStateSyncResponse {
+  bool success = 1;
+}
+
+message NotifyResponse {
+  bool acknowledged = 1;
+}
+
+message QueryEntitiesRequest {
+  int32 grid_x = 1;
+  int32 grid_y = 2;
+  double radius = 3;
+  repeated string type_filter = 4;
+}
+
+message QueryEntitiesResponse {
+  repeated spatialserver.v1.EntitySnapshot entities = 1;
+}

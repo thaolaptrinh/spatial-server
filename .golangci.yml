@@ -1,0 +1,39 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - forbidigo
+    - gocritic
+    - goimports
+    - misspell
+    - prealloc
+    - revive
+    - thelper
+    - tparallel
+    - usestdlibvars
+    - wastedassign
+linters-settings:
+  goimports:
+    local-prefixes: github.com/thaolaptrinh/spatial-server
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+  staticcheck:
+    checks: ["all"]
+run:
+  timeout: 5m
+  exclude-dirs:
+    - proto/gen
+    - references
+    - docs
+    - infra
+    - deploy
+    - .github
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

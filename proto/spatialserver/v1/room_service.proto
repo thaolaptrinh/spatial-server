@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package spatialserver.v1;
+
+option go_package = "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1";
+
+import "spatialserver/v1/common.proto";
+
+service RoomService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc PrepareShutdown(spatialserver.v1.ServerID) returns (PrepareShutdownResponse);
+  rpc LookupZone(LookupZoneRequest) returns (LookupZoneResponse);
+  rpc LookupServer(LookupServerRequest) returns (LookupServerResponse);
+  rpc ReportMetrics(ReportMetricsRequest) returns (ReportMetricsResponse);
+  rpc TransferZone(stream spatialserver.v1.ZoneSnapshot) returns (TransferZoneResponse);
+  rpc PrepareTransfer(PrepareTransferRequest) returns (PrepareTransferResponse);
+}
+
+message RegisterRequest {
+  string server_id = 1;
+  string host = 2;
+  int32 port = 3;
+  int32 max_zones = 4;
+  map<string, string> metadata = 5;
+}
+
+message RegisterResponse {
+  bool success = 1;
+}
+
+message HeartbeatRequest {
+  string server_id = 1;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+}
+
+message PrepareShutdownResponse {
+  bool acknowledged = 1;
+}
+
+message LookupZoneRequest {
+  string zone_id = 1;
+}
+
+message LookupZoneResponse {
+  spatialserver.v1.ServerID server = 1;
+  string host = 2;
+  int32 port = 3;
+}
+
+message LookupServerRequest {
+  string server_id = 1;
+}
+
+message LookupServerResponse {
+  string host = 1;
+  int32 port = 2;
+  spatialserver.v1.ServerStatus status = 3;
+}
+
+message ReportMetricsRequest {
+  double cpu_usage = 1;
+  double memory_usage = 2;
+  int32 active_connections = 3;
+  int32 active_runtimes = 4;
+}
+
+message ReportMetricsResponse {
+  bool acknowledged = 1;
+}
+
+message TransferZoneResponse {
+  bool success = 1;
+}
+
+message PrepareTransferRequest {
+  string zone_id = 1;
+  string target_server_id = 2;
+}
+
+message PrepareTransferResponse {
+  bool accepted = 1;
+}

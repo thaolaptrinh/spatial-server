@@ -1,0 +1,69 @@
+name: Documentation Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  link-check:
+    name: Check Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --config .lychee.toml
+            --no-progress
+            --verbose
+            docs/**/*.md
+            README.md
+            CHANGELOG.md
+          fail: true
+          jobSummary: true
+
+  mermaid-check:
+    name: Validate Mermaid Diagrams
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli
+      - name: Validate Mermaid syntax
+        run: |
+          ERROR_COUNT=0
+          TMPDIR=$(mktemp -d)
+          INDEX=0
+          for file in $(find docs -name '*.md' | sort); do
+            while IFS= read -r line; do
+              if echo "$line" | grep -q '```mermaid'; then
+                INDEX=$((INDEX + 1))
+                MMFILE="$TMPDIR/$(printf '%04d' $INDEX).mmd"
+                IN_BLOCK=true
+              elif echo "$line" | grep -q '```' && [ "${IN_BLOCK:-false}" = true ]; then
+                IN_BLOCK=false
+              elif [ "${IN_BLOCK:-false}" = true ]; then
+                echo "$line" >> "$MMFILE"
+              fi
+            done < "$file"
+          done
+          for mmd in "$TMPDIR"/*.mmd; do
+            [ -f "$mmd" ] || continue
+            echo "Checking: $(basename $mmd) ($(wc -l < "$mmd") lines)"
+            if ! npx --yes --silent @mermaid-js/mermaid-cli mmdc -i "$mmd" -o /dev/null -b transparent 2>/dev/null; then
+              echo "::error::Invalid Mermaid diagram in $(basename $mmd)"
+              ERROR_COUNT=$((ERROR_COUNT + 1))
+            fi
+          done
+          rm -rf "$TMPDIR"
+          if [ "$ERROR_COUNT" -gt 0 ]; then
+            echo "::error::$ERROR_COUNT Mermaid diagram(s) failed validation"
+            exit 1
+          fi
+          echo "All Mermaid diagrams validated successfully"

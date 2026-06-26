@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package spatialserver.v1;
+
+option go_package = "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1";
+
+message EntityID {
+  string id = 1;
+}
+
+message ZoneID {
+  string id = 1;
+  string runtime_id = 2;
+  int32 grid_x = 3;
+  int32 grid_y = 4;
+}
+
+message RuntimeID {
+  string id = 1;
+}
+
+message ServerID {
+  string id = 1;
+}
+
+message Vector3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message EntitySnapshot {
+  string entity_id = 1;
+  string type = 2;
+  Vector3 position = 3;
+  map<string, bytes> attributes = 4;
+}
+
+enum RuntimeStatus {
+  RUNTIME_STATUS_UNSPECIFIED = 0;
+  RUNTIME_STATUS_CREATING = 1;
+  RUNTIME_STATUS_ACTIVE = 2;
+  RUNTIME_STATUS_DRAINING = 3;
+  RUNTIME_STATUS_DESTROYED = 4;
+}
+
+enum ZoneStatus {
+  ZONE_STATUS_UNSPECIFIED = 0;
+  ZONE_STATUS_UNOWNED = 1;
+  ZONE_STATUS_ACTIVE = 2;
+  ZONE_STATUS_TRANSFERRING = 3;
+  ZONE_STATUS_ORPHAN = 4;
+}
+
+enum ServerStatus {
+  SERVER_STATUS_UNSPECIFIED = 0;
+  SERVER_STATUS_JOINING = 1;
+  SERVER_STATUS_ACTIVE = 2;
+  SERVER_STATUS_DRAINING = 3;
+  SERVER_STATUS_SHUTDOWN = 4;
+}
+
+message EntityEnterLeave {
+  string entity_id = 1;
+  string zone_id = 2;
+  Vector3 position = 3;
+}
+
+message ZoneSnapshot {
+  ZoneID zone_id = 1;
+  repeated EntitySnapshot entities = 2;
+  bytes aoi_state = 3;
+}
+
+message EntityUpdate {
+  string entity_id = 1;
+  Vector3 position = 2;
+  int32 sequence = 3;
+  int64 timestamp = 4;
+}
+
+message Ack {
+  bool success = 1;
+}

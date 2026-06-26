@@ -1,0 +1,53 @@
+# lychee link checker configuration
+# See https://github.com/lycheeverse/lychee
+
+# Cache check results to avoid re-checking unchanged URLs
+cache = true
+max_cache_age = "1d"
+
+# Request configuration
+timeout = 30
+retry_wait_time = 5
+max_retries = 3
+
+# Exclude patterns (regex)
+exclude = [
+  # Localhost and private addresses (not reachable in CI)
+  'http://localhost',
+  'http://127\.0\.0\.1',
+  'http://0\.0\.0\.0',
+  'https?://.*\.local',
+
+  # Placeholder/example domains
+  'https?://.*\.example\.com',
+  'https?://.*\.example\.org',
+
+  # git diff references (not actual links)
+  '\+\+\+',
+  '---',
+]
+
+# Accept valid but non-standard HTTP status codes
+accept = [
+  200, 201, 202, 203, 204, 205,
+  301, 302, 303, 307, 308,
+  401, 403,  # auth challenges (may be behind login pages)
+]
+
+# Include (check) these patterns only
+include = [
+  'https?://',
+]
+
+# File extensions to check
+include_paths = [
+  'docs/**/*.md',
+  'README.md',
+  'CHANGELOG.md',
+]
+
+# Skip checking links in code blocks
+skip_code_blocks = true
+
+# Verbose output for debugging
+verbose = false
