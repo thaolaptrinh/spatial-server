@@ -2,7 +2,9 @@ package entity
 
 import (
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 )
 
@@ -44,3 +46,34 @@ func TestEntityAttributes(t *testing.T) {
 		t.Errorf("name = %q, want %q", e.Attrs["name"], "sword")
 	}
 }
+
+func TestBaseLifecycle_NoOp(t *testing.T) {
+	var l Lifecycle = BaseLifecycle{}
+	assert.NotPanics(t, func() {
+		l.Spawn()
+		l.Despawn()
+		l.OnEnterZone("z1")
+		l.OnLeaveZone("z1")
+		l.OnSimulate(time.Millisecond)
+		l.OnAction("jump", nil)
+	})
+}
+
+func TestEntity_LifecycleAttach(t *testing.T) {
+	rec := &recordingLifecycle{}
+	e := New("e1", "npc", types.RuntimeID("r1"))
+	e.Lifecycle = rec
+	e.Lifecycle.OnSimulate(50 * time.Millisecond)
+	e.Lifecycle.OnAction("attack", []byte("x"))
+	assert.Equal(t, 1, rec.simCount)
+	assert.Equal(t, "attack", rec.lastAction)
+}
+
+type recordingLifecycle struct {
+	BaseLifecycle
+	simCount   int
+	lastAction string
+}
+
+func (r *recordingLifecycle) OnSimulate(time.Duration) { r.simCount++ }
+func (r *recordingLifecycle) OnAction(a string, _ []byte) { r.lastAction = a }
