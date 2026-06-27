@@ -62,7 +62,7 @@ func main() {
 				return
 			}
 
-			id, payload, _, err := protocol.Decode(msg)
+			_, id, payload, _, _, err := protocol.Decode(msg)
 			if err != nil {
 				log.Printf("decode error: %v", err)
 				continue
@@ -137,7 +137,7 @@ func main() {
 					log.Printf("marshal error: %v", err)
 					continue
 				}
-				frame := protocol.Encode(protocol.PacketIDPositionUpdate, payload, false)
+				frame := protocol.Encode(protocol.PacketIDPositionUpdate, payload, false, 0)
 				if err := conn.Write(ctx, websocket.MessageBinary, frame); err != nil {
 					log.Printf("write error: %v", err)
 					cancel()

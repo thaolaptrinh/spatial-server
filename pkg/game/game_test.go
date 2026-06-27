@@ -257,7 +257,7 @@ func TestDispatch_DecodesPositionUpdateProto(t *testing.T) {
 	newPos := &v1.Vector3{X: 100, Y: 0, Z: 200}
 	upd := &v1.EntityUpdate{EntityId: "p1", Position: newPos}
 	payload, _ := proto.Marshal(upd)
-	frame := protocol.Encode(protocol.PacketIDPositionUpdate, payload, false)
+	frame := protocol.Encode(protocol.PacketIDPositionUpdate, payload, false, 0)
 
 	g.Inbox <- InboundPacket{ClientID: "p1", Data: frame}
 
@@ -306,7 +306,7 @@ func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
 
 	for len(g.Outbox) > 0 {
 		pkt := <-g.Outbox
-		id, payload, _, err := protocol.Decode(pkt.Data)
+		_, id, payload, _, _, err := protocol.Decode(pkt.Data)
 		require.NoError(t, err)
 
 		if id == protocol.PacketIDEntitySpawn {

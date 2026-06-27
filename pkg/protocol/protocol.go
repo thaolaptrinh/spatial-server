@@ -4,16 +4,20 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 )
 
 const (
-	headerSize       = 3
-	compressionFlag  = 0x01
-	compressionLevel = 3
-	compressMinSize  = 128
+	headerSize          = 8
+	ProtocolVersionV1   = 0x01
+	compressionFlag     = 0x01
+	compressionLevel    = 3
+	compressMinSize     = 128
 )
+
+var ErrUnsupportedVersion = errors.New("unsupported protocol version")
 
 type PacketID uint16
 
@@ -30,7 +34,7 @@ const (
 	PacketIDHeartbeat      PacketID = 0xFF
 )
 
-func Encode(id PacketID, payload []byte, compress bool) []byte {
+func Encode(id PacketID, payload []byte, compress bool, seq uint32) []byte {
 	data := payload
 	var compressed bool
 	if compress && len(payload) > compressMinSize {
@@ -52,33 +56,41 @@ func Encode(id PacketID, payload []byte, compress bool) []byte {
 	}
 
 	buf := make([]byte, headerSize+len(data))
-	buf[0] = flags
+	buf[0] = ProtocolVersionV1
 	binary.BigEndian.PutUint16(buf[1:3], uint16(id))
+	buf[3] = flags
+	binary.BigEndian.PutUint32(buf[4:8], seq)
 	copy(buf[headerSize:], data)
 	return buf
 }
 
-func Decode(packet []byte) (PacketID, []byte, bool, error) {
+func Decode(packet []byte) (byte, PacketID, []byte, bool, uint32, error) {
 	if len(packet) < headerSize {
-		return PacketIDInvalid, nil, false, fmt.Errorf("packet too short: %d bytes", len(packet))
+		return 0, PacketIDInvalid, nil, false, 0, fmt.Errorf("packet too short: %d bytes", len(packet))
 	}
 
-	flags := packet[0]
+	version := packet[0]
+	if version != ProtocolVersionV1 {
+		return version, PacketIDInvalid, nil, false, 0, ErrUnsupportedVersion
+	}
+
 	id := PacketID(binary.BigEndian.Uint16(packet[1:3]))
+	flags := packet[3]
+	seq := binary.BigEndian.Uint32(packet[4:8])
 	compressed := (flags & compressionFlag) != 0
 	data := packet[headerSize:]
 
 	if compressed {
 		r, err := gzip.NewReader(bytes.NewReader(data))
 		if err != nil {
-			return PacketIDInvalid, nil, false, fmt.Errorf("gzip reader: %w", err)
+			return version, PacketIDInvalid, nil, false, 0, fmt.Errorf("gzip reader: %w", err)
 		}
 		defer r.Close()
 		data, err = io.ReadAll(r)
 		if err != nil {
-			return PacketIDInvalid, nil, false, fmt.Errorf("gzip decompress: %w", err)
+			return version, PacketIDInvalid, nil, false, 0, fmt.Errorf("gzip decompress: %w", err)
 		}
 	}
 
-	return id, data, compressed, nil
+	return version, id, data, compressed, seq, nil
 }

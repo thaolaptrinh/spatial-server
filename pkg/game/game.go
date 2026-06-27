@@ -276,7 +276,7 @@ func (g *Game) updateVisibility() {
 }
 
 func (g *Game) dispatch(pkt InboundPacket) {
-	id, payload, _, err := protocol.Decode(pkt.Data)
+	_, id, payload, _, _, err := protocol.Decode(pkt.Data)
 	if err != nil {
 		return
 	}
@@ -303,11 +303,11 @@ func encodeSpawn(e *entity.Entity) []byte {
 		Position: &v1.Vector3{X: e.Position.X, Y: e.Position.Y, Z: e.Position.Z},
 	}
 	b, _ := proto.Marshal(msg)
-	return protocol.Encode(protocol.PacketIDEntitySpawn, b, false)
+	return protocol.Encode(protocol.PacketIDEntitySpawn, b, false, 0)
 }
 
 func encodeDespawn(id types.EntityID) []byte {
 	msg := &v1.EntityID{Id: string(id)}
 	b, _ := proto.Marshal(msg)
-	return protocol.Encode(protocol.PacketIDEntityDespawn, b, false)
+	return protocol.Encode(protocol.PacketIDEntityDespawn, b, false, 0)
 }
