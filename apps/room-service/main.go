@@ -7,13 +7,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/env"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -23,6 +18,7 @@ import (
 
 	"github.com/thaolaptrinh/spatial-server/internal/migration"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
+	"github.com/thaolaptrinh/spatial-server/pkg/config"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
 	"github.com/thaolaptrinh/spatial-server/pkg/room"
 	"github.com/thaolaptrinh/spatial-server/pkg/storage"
@@ -31,12 +27,12 @@ import (
 
 type roomServiceServer struct {
 	spatialserverv1.UnimplementedRoomServiceServer
-	registry  *room.ServerRegistry
-	ownership *room.ZoneOwnership
+	servers room.ServerStore
+	zones   room.ZoneStore
 }
 
 func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.RegisterRequest) (*spatialserverv1.RegisterResponse, error) {
-	err := s.registry.Register(&room.ServerInfo{
+	err := s.servers.Register(ctx, &room.ServerInfo{
 		ID:       types.ServerID(req.ServerId),
 		Host:     req.Host,
 		Port:     int(req.Port),
@@ -50,7 +46,7 @@ func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.R
 }
 
 func (s *roomServiceServer) Heartbeat(ctx context.Context, req *spatialserverv1.HeartbeatRequest) (*spatialserverv1.HeartbeatResponse, error) {
-	err := s.registry.Heartbeat(types.ServerID(req.ServerId))
+	err := s.servers.Heartbeat(ctx, types.ServerID(req.ServerId))
 	if err != nil {
 		return &spatialserverv1.HeartbeatResponse{Acknowledged: false}, nil
 	}
@@ -58,58 +54,49 @@ func (s *roomServiceServer) Heartbeat(ctx context.Context, req *spatialserverv1.
 }
 
 func (s *roomServiceServer) LookupZone(ctx context.Context, req *spatialserverv1.LookupZoneRequest) (*spatialserverv1.LookupZoneResponse, error) {
-	serverID, host, port, err := room.ResolveZone(s.ownership, s.registry, req.ZoneId)
+	serverID, err := s.zones.Lookup(ctx, req.ZoneId)
+	if err == nil {
+		info, err := s.servers.Get(ctx, serverID)
+		if err == nil {
+			return &spatialserverv1.LookupZoneResponse{
+				Server: &spatialserverv1.ServerID{Id: string(info.ID)},
+				Host:   info.Host,
+				Port:   int32(info.Port),
+			}, nil
+		}
+	}
+	server, err := s.servers.LeastLoaded(ctx)
 	if err != nil {
-		server, ok := s.registry.LeastLoaded()
-		if !ok {
-			return nil, status.Errorf(codes.Unavailable, "no servers available for zone %s", req.ZoneId)
-		}
-		if err := s.ownership.Claim(req.ZoneId, server.ID); err != nil {
-			return nil, status.Errorf(codes.Internal, "claim zone %s: %v", req.ZoneId, err)
-		}
-		return &spatialserverv1.LookupZoneResponse{
-			Server: &spatialserverv1.ServerID{Id: string(server.ID)},
-			Host:   server.Host,
-			Port:   int32(server.Port),
-		}, nil
+		return nil, status.Errorf(codes.Unavailable, "no servers available for zone %s", req.ZoneId)
+	}
+	if err := s.zones.Claim(ctx, req.ZoneId, "", server.ID); err != nil {
+		return nil, status.Errorf(codes.Internal, "claim zone %s: %v", req.ZoneId, err)
 	}
 	return &spatialserverv1.LookupZoneResponse{
-		Server: &spatialserverv1.ServerID{Id: string(serverID)},
-		Host:   host,
-		Port:   int32(port),
+		Server: &spatialserverv1.ServerID{Id: string(server.ID)},
+		Host:   server.Host,
+		Port:   int32(server.Port),
 	}, nil
 }
 
 func main() {
-	k := koanf.New(".")
-	if err := k.Load(file.Provider("configs/defaults.yml"), yaml.Parser()); err != nil {
-		fmt.Fprintf(os.Stderr, "load defaults: %v\n", err)
-		os.Exit(1)
-	}
-	if err := k.Load(file.Provider("configs/room-service.yml"), yaml.Parser()); err != nil {
+	cfg, err := config.Load("configs/defaults.yml", "configs/room-service.yml")
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
-	if err := k.Load(env.Provider("SPATIAL_", ".", func(s string) string {
-		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "SPATIAL_")), "__", ".", -1)
-	}), nil); err != nil {
-		fmt.Fprintf(os.Stderr, "load env: %v\n", err)
-		os.Exit(1)
-	}
 
-	logger := logging.NewDefault(k.String("service.name"))
+	logger := logging.NewDefault(cfg.Service.Name)
 	ctx := logging.WithLogger(context.Background(), logger)
 
-	pgDSN := k.String("postgres.dsn")
-	pgPool, err := storage.NewPostgresPool(ctx, pgDSN)
+	pgPool, err := storage.NewPostgresPool(ctx, cfg.Postgres.DSN)
 	if err != nil {
 		logger.Error("postgres connection failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	defer pgPool.Close()
 
-	redisAddr := k.String("redis.addr")
-	redisClient, err := storage.NewRedisClient(redisAddr)
+	redisClient, err := storage.NewRedisClient(cfg.Redis.Addr)
 	if err != nil {
 		logger.Error("redis connection failed", slog.String("error", err.Error()))
 		os.Exit(1)
@@ -122,10 +109,9 @@ func main() {
 	}
 	logger.Info("migrations completed")
 
-	gRPCPort := k.Int("grpc.port")
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", gRPCPort))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
-		logger.Error("listen failed", slog.Int("port", gRPCPort), slog.String("error", err.Error()))
+		logger.Error("listen failed", slog.Int("port", cfg.GRPC.Port), slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
@@ -136,13 +122,14 @@ func main() {
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
 	reflection.Register(srv)
 
-	registry := room.NewServerRegistry()
-	ownership := room.NewZoneOwnership()
-	service := &roomServiceServer{registry: registry, ownership: ownership}
+	service := &roomServiceServer{
+		servers: storage.NewServerRepository(pgPool),
+		zones:   storage.NewZoneRepository(pgPool),
+	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
 
 	go func() {
-		logger.Info("room-service starting", slog.Int("port", gRPCPort))
+		logger.Info("room-service starting", slog.Int("port", cfg.GRPC.Port))
 		if err := srv.Serve(lis); err != nil {
 			logger.Error("grpc serve error", slog.String("error", err.Error()))
 			os.Exit(1)
