@@ -1,0 +1,2 @@
+Redis for spatial-server (Bitnami, replication mode, cloud-agnostic).
+When managed.redis = true, set redis.enabled = false and supply a managed endpoint.

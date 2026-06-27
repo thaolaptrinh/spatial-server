@@ -15,7 +15,7 @@ All infrastructure decisions follow [ADR-014](../../adr/014-infrastructure-platf
 ## Scope
 
 - `infra/` directory per [ADR-014](../../adr/014-infrastructure-platform.md):
-  - `infra/terraform/` — modules: provider config, VPC/networking, K3s cluster, node pools, RDS (PostgreSQL), ElastiCache (Redis), DNS
+  - `infra/terraform/` — cloud-specific providers under `providers/<cloud>/` ([ADR-024](../../adr/024-multicloud-provider-abstraction.md)), networking, K3s cluster, node pools, Cloudflare DNS; HCP Terraform remote state (Postgres/Redis run in-cluster, see §4)
   - `infra/cloud-init/` — K3s server + agent node bootstrap scripts
   - `infra/helm/` — charts: `gateway`, `room-service`, `game-server`, `postgres`, `redis`, `monitoring`
   - `infra/k3s/` — cluster manifests: Namespace, Ingress (TLS-ready), HPA, PDB, ConfigMaps, Secrets
@@ -38,7 +38,7 @@ All infrastructure decisions follow [ADR-014](../../adr/014-infrastructure-platf
                           Internet
                               │
                        ┌──────▼───────┐
-                       │  DNS Route53 │ ◄── infra/terraform/modules/dns
+                        │ DNS Cloudflare│ ◄── infra/terraform/modules/dns
                        └──────┬───────┘
                               │ WSS :443 (cert in Phase 6)
             ┌─────────────────▼──────────────────┐
@@ -60,10 +60,10 @@ All infrastructure decisions follow [ADR-014](../../adr/014-infrastructure-platf
             │   └──────┬────────┘   └──────┬───────┘ │
             └──────────┼───────────────────┼─────────┘
                        │                   │
-          ┌────────────▼─────┐      ┌──────▼──────────┐
-          │ RDS PostgreSQL   │      │ ElastiCache Redis│ ◄── terraform modules
-          │ (managed, TF)    │      │ (managed, TF)    │
-          └──────────────────┘      └──────────────────┘
+           ┌────────────▼─────┐      ┌──────▼──────────┐
+           │ CloudNativePG    │      │ Bitnami Redis    │ ◄── in-cluster (K3s)
+           │ Postgres         │      │ (Helm chart)     │    per ADR-024
+           └──────────────────┘      └──────────────────┘
 
    Observability — infra/helm/monitoring:
    ┌───────────────────────────────────────────────────────┐
@@ -83,16 +83,16 @@ Cloud-agnostic provisioning per [ADR-014](../../adr/014-infrastructure-platform.
 
 | Module | Files | Responsibility |
 |--------|-------|----------------|
-| `providers/` | `providers/aws.tf`, `providers/versions.tf` | Provider config (AWS reference impl; variables abstract cloud choice) |
+| `providers/<cloud>/` | per-cloud `main.tf`, `variables.tf`, `outputs.tf` | Cloud-specific IaaS (network, servers, load balancer) behind a shared provider contract. **Hetzner is the staging provider**; Sakura Internet / AWS are future candidates ([ADR-024](../../adr/024-multicloud-provider-abstraction.md)) |
 | `modules/vpc/` | `main.tf`, `variables.tf`, `outputs.tf` | VPC, public/private subnets, NAT, security groups |
 | `modules/k3s/` | `main.tf`, `cloud-init.tf`, `outputs.tf` | K3s server node (control plane), injects server cloud-init token |
 | `modules/node_pool/` | `main.tf`, `variables.tf` | K3s agent (worker) pool, autoscaling group, joins cluster via token |
-| `modules/rds/` | `main.tf`, `variables.tf`, `outputs.tf` | Managed PostgreSQL (PostgreSQL 16), subnet group, security group (DB network only per [ADR-018](../../adr/018-security.md)) |
-| `modules/elasticache/` | `main.tf`, `variables.tf`, `outputs.tf` | Managed Redis 7 (replication group for HA per [ADR-022](../../adr/022-session-management.md)) |
-| `modules/dns/` | `main.tf`, `variables.tf` | Route53 record → Ingress LB |
-| `environments/staging/` | `main.tf`, `variables.tf`, `terraform.tfvars.example`, `backend.tf` | Composes modules; remote state backend |
+| `modules/dns/` | `main.tf`, `variables.tf` | Cloudflare DNS record → Ingress LB |
+| `environments/staging/` | `main.tf`, `variables.tf`, `terraform.tfvars.example`, `backend.tf` | Composes `module "cloud" = providers/hcloud`; remote state in HCP Terraform |
 
-State is remote (S3 + DynamoDB lock). `terraform.tfvars.example` documents every variable; secrets never appear — they come from `kubectl`-created Secrets or CI-injected env at apply time.
+Data services (PostgreSQL, Redis) are **not** Terraform modules — they run in-cluster as CloudNativePG Postgres + Bitnami Redis (see [ADR-024](../../adr/024-multicloud-provider-abstraction.md) and §4).
+
+State is remote (HCP Terraform). `terraform.tfvars.example` documents every variable; secrets never appear — they come from `kubectl`-created Secrets or CI-injected env at apply time.
 
 ### 2. cloud-init node bootstrap (`infra/cloud-init/`)
 
@@ -137,7 +137,7 @@ Images use tags `dev-<sha>` (dev) / `v<semver>` (release) per [ADR-008](../../ad
 
 ### 4. Helm charts — stateful services (`infra/helm/postgres`, `redis`)
 
-Thin charts that prefer managed instances when Terraform provisioned RDS/ElastiCache (toggle `managed: true` in `values.yaml`). When `managed: false`, the chart deploys the container (matching `deploy/docker-compose/docker-compose.yml`: `postgres:16-alpine`, `redis:7-alpine`) for dev/CI parity. PersistentVolumeClaims use the cluster's default StorageClass.
+Per [ADR-024](../../adr/024-multicloud-provider-abstraction.md), data services run in-cluster rather than as cloud-managed offerings — no RDS/ElastiCache from Terraform. The `postgres` chart installs CloudNativePG (native failover, PITR); the `redis` chart uses the Bitnami chart. For dev/CI parity the charts can fall back to the plain containers matching `deploy/docker-compose/docker-compose.yml` (`postgres:16-alpine`, `redis:7-alpine`). PersistentVolumeClaims use the cluster's CSI StorageClass (`local-path` for dev only).
 
 ### 5. Monitoring Helm chart (`infra/helm/monitoring`)
 
@@ -224,7 +224,7 @@ Per [ADR-014](../../adr/014-infrastructure-platform.md) (GitHub Actions):
 ## Deployment Flow
 
 ```
-1. terraform init/apply   → VPC, K3s server + agent nodes, RDS, ElastiCache, DNS
+1. terraform init/apply   → network, K3s server + agent nodes, load balancer, Cloudflare DNS
 2. cloud-init (first boot)→ Docker + K3s install, agents join via server token
 3. helm install postgres  → managed: skip / else postgres chart
 4. helm install redis     → managed: skip / else redis chart
@@ -242,12 +242,10 @@ Validation gate: all service pods `Ready`, Prometheus targets up, OTel collector
 
 | File / Directory | Action |
 |------------------|--------|
-| `infra/terraform/providers/{aws,versions}.tf` | Create |
+| `infra/terraform/providers/<cloud>/*` (+ `providers/shared/cloudinit/*`) | Create |
 | `infra/terraform/modules/vpc/*` | Create |
 | `infra/terraform/modules/k3s/*` | Create |
 | `infra/terraform/modules/node_pool/*` | Create |
-| `infra/terraform/modules/rds/*` | Create |
-| `infra/terraform/modules/elasticache/*` | Create |
 | `infra/terraform/modules/dns/*` | Create |
 | `infra/terraform/environments/staging/*` | Create |
 | `infra/cloud-init/{k3s-server,k3s-agent,common}.yaml` | Create |

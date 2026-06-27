@@ -3,15 +3,36 @@ on:
   pull_request:
     paths:
       - 'infra/terraform/**'
+
 jobs:
   plan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+
+      # Always-on, no credentials required.
       - name: Terraform fmt
         run: terraform -chdir=infra/terraform/environments/staging fmt -check -recursive
-      - name: Terraform init
-        run: terraform -chdir=infra/terraform/environments/staging init -backend=false
+
       - name: Terraform validate
-        run: terraform -chdir=infra/terraform/environments/staging validate
+        run: |
+          terraform -chdir=infra/terraform/environments/staging init -backend=false
+          terraform -chdir=infra/terraform/environments/staging validate
+
+      # Real plan against HCP Terraform state + provider credentials.
+      # Requires all of:
+      #   - <ORG> set to your HCP Terraform org in backend.tf
+      #   - repo secrets: TF_API_TOKEN, HCLOUD_TOKEN, CLOUDFLARE_API_TOKEN
+      #   - repo variable: TF_PLAN_ENABLED = "true"
+      # Stays skipped until configured, so PR checks stay green by default.
+      - name: Terraform plan
+        if: ${{ vars.TF_PLAN_ENABLED == 'true' }}
+        env:
+          TF_TOKEN_app_terraform_io:  ${{ secrets.TF_API_TOKEN }}
+          HCLOUD_TOKEN:               ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_hcloud_token:        ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          terraform -chdir=infra/terraform/environments/staging init
+          terraform -chdir=infra/terraform/environments/staging plan -no-color

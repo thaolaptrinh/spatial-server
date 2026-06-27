@@ -30,3 +30,12 @@ Thumbs.db
 # Dependencies
 /vendor/
 
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+
+# Helm (downloaded chart dependencies)
+infra/helm/*/charts/
+infra/helm/*.tgz
+

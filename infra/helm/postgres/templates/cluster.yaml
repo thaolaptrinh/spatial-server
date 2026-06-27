@@ -1,0 +1,37 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: spatial-postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: spatial-server
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:{{ .Values.image.tag }}
+  instances: {{ .Values.instances | int }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.database | quote }}
+      owner: {{ .Values.owner | quote }}
+  storage:
+    storageClass: {{ .Values.storage.storageClass | quote }}
+    size: {{ .Values.storage.size }}
+  {{- if .Values.backups.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ .Values.backups.destinationPath | quote }}
+      {{- with .Values.backups.endpointURL }}
+      endpointURL: {{ . | quote }}
+      {{- end }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .Values.backups.secretName }}
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: {{ .Values.backups.secretName }}
+          key: ACCESS_SECRET_KEY
+      wal:
+        retention: 7d
+  retentionPolicy: "14d"
+  {{- end }}
+  resources:
+    {{- toYaml .Values.resources | nindent 4 }}

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: redis
+description: Redis for spatial-server (self-managed, cloud-agnostic)
+type: application
+version: 0.1.0
+appVersion: "7"
+dependencies:
+  - name: redis
+    version: "20.6.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

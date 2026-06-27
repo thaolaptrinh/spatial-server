@@ -73,6 +73,18 @@ infra/
 - OpenTelemetry is the standard tracing solution.
 - Cloud agnostic — no business logic depends on a specific cloud provider.
 
+### Cloud Selection
+
+The platform remains cloud-agnostic by design; only the IaaS Terraform layer is cloud-specific.
+Concrete providers implement a shared provider contract (see
+[ADR-024](024-multicloud-provider-abstraction.md)):
+
+- **Hetzner Cloud** — staging/test (first implemented provider).
+- **Sakura Internet / AWS** — production candidates (future provider modules, same contract).
+
+Switching an environment's cloud changes only `module "cloud" { source = ... }` and the
+cloud-credential variable in that environment.
+
 ## Alternatives
 
 1. **Managed Kubernetes (EKS/GKE/AKS)**: Use a cloud-managed control plane for less operational burden. Rejected for the baseline because it introduces vendor lock-in and higher cost for a small team, though it remains an option for specific deployments.

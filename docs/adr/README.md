@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 This directory contains Architecture Decision Records (ADRs) for the Spatial Server platform.
 
@@ -31,6 +31,7 @@ This directory contains Architecture Decision Records (ADRs) for the Spatial Ser
 | 021 | [Gateway Architecture](021-gateway-architecture.md) | Accepted |
 | 022 | [Session Management](022-session-management.md) | Accepted |
 | 023 | [Entity Model](023-entity-model.md) | Accepted |
+| 024 | [Multi-cloud Provider Abstraction](024-multicloud-provider-abstraction.md) | Accepted |
 
 ## Reading Order
 

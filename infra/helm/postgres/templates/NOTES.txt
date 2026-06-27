@@ -1,0 +1,9 @@
+PostgreSQL for spatial-server via CloudNativePG.
+
+Operator: with operator.enabled=true, the CloudNativePG operator is installed by this release.
+Credentials: CNPG auto-creates Secrets "spatial-postgres-app" and "spatial-postgres-superuser".
+Storage: set values.storage.storageClass to your cloud CSI class (e.g. "hcloud"); "" = default.
+Backups: set backups.enabled + an S3-compatible target to enable PITR.
+
+Future: if a cloud offers managed Postgres, replace this chart with a provider endpoint
+and keep the same Secret names consumed by services.

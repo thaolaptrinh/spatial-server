@@ -1,5 +1,19 @@
-variable "ssh_pub_key" { type = string }
-variable "db_password" { type = string; sensitive = true }
-variable "dns_zone"    { type = string }
-variable "lb_dns_name" { type = string }
-variable "lb_zone_id"  { type = string }
+# --- Cloud-agnostic ---
+variable "ssh_pub_key" {
+  type = string
+}
+
+variable "dns_zone" {
+  type = string
+}
+
+# --- Cloud credentials (the only lines that change when switching cloud) ---
+variable "hcloud_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "cloudflare_api_token" {
+  type      = string
+  sensitive = true
+}

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: postgres
+description: PostgreSQL for spatial-server via CloudNativePG (cloud-agnostic, K8s-native)
+type: application
+version: 0.1.0
+appVersion: "16"
+dependencies:
+  - name: cloudnative-pg
+    version: "0.28.x"
+    repository: "https://cloudnative-pg.io/charts"
+    condition: operator.enabled

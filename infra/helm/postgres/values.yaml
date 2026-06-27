@@ -1,0 +1,31 @@
+# Install the CNPG operator as part of this release. Set false if the operator
+# is already installed cluster-wide.
+operator:
+  enabled: true
+
+image:
+  tag: "16"
+
+database: spatial
+owner: spatial
+
+instances: 1            # bump to 3 for HA in production
+
+storage:
+  # Cloud-agnostic knob, set per environment. "" uses the cluster default
+  # StorageClass. Use a cloud CSI class (e.g. "hcloud") in production;
+  # NEVER rely on local-path for production DBs.
+  storageClass: ""
+  size: 20Gi
+
+# PITR backups to S3-compatible object storage (provider-specific). Enable when
+# a bucket + credentials secret exist.
+backups:
+  enabled: false
+  destinationPath: ""    # e.g. s3://spatial-pg-backups
+  endpointURL: ""        # e.g. https://fsn1.your-objectstorage.com
+  secretName: cnpg-backup-creds
+
+resources:
+  requests: { cpu: 250m, memory: 512Mi }
+  limits:   { cpu: "1", memory: 1Gi }
