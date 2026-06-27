@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,8 +34,34 @@ import (
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
+type boundedSendQueue struct {
+	ch    chan []byte
+	drops atomic.Uint64
+}
+
+func newBoundedSendQueue(capacity int) *boundedSendQueue {
+	return &boundedSendQueue{ch: make(chan []byte, capacity)}
+}
+
+func (q *boundedSendQueue) push(data []byte) {
+	select {
+	case q.ch <- data:
+	default:
+		select {
+		case <-q.ch:
+			q.drops.Add(1)
+		default:
+		}
+		select {
+		case q.ch <- data:
+		default:
+			q.drops.Add(1)
+		}
+	}
+}
+
 type clientEntry struct {
-	ch   chan []byte
+	q    *boundedSendQueue
 	done chan struct{}
 }
 
@@ -47,19 +74,18 @@ func newClientRegistry() *clientRegistry {
 	return &clientRegistry{clients: make(map[string]*clientEntry)}
 }
 
-func (r *clientRegistry) register(id string, ch chan []byte) chan struct{} {
+func (r *clientRegistry) register(id string) *clientEntry {
 	r.mu.Lock()
-	done := make(chan struct{})
-	r.clients[id] = &clientEntry{ch: ch, done: done}
-	r.mu.Unlock()
-	return done
+	defer r.mu.Unlock()
+	entry := &clientEntry{q: newBoundedSendQueue(64), done: make(chan struct{})}
+	r.clients[id] = entry
+	return entry
 }
 
 func (r *clientRegistry) unregister(id string) {
 	r.mu.Lock()
 	if e, ok := r.clients[id]; ok {
 		close(e.done)
-		close(e.ch)
 		delete(r.clients, id)
 	}
 	r.mu.Unlock()
@@ -72,10 +98,7 @@ func (r *clientRegistry) send(id string, data []byte) {
 	if !ok {
 		return
 	}
-	select {
-	case e.ch <- data:
-	case <-e.done:
-	}
+	e.q.push(data)
 }
 
 type gameServerServer struct {
@@ -120,8 +143,7 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 		switch pkt.GetKind() {
 		case spatialserverv1.Kind_KIND_CONNECT:
 			id := pkt.GetClientId()
-			ch := make(chan []byte, 64)
-			done := s.clients.register(id, ch)
+			entry := s.clients.register(id)
 			owned = append(owned, id)
 
 			s.game.EnqueueAddEntity(entity.New(
@@ -130,11 +152,11 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 				types.RuntimeID(pkt.GetMeta().GetRuntimeId()),
 			))
 
-			go func(ch chan []byte, done chan struct{}) {
+			go func(q *boundedSendQueue, done chan struct{}) {
 				defer s.clients.unregister(id)
 				for {
 					select {
-					case data, ok := <-ch:
+					case data, ok := <-q.ch:
 						if !ok {
 							return
 						}
@@ -154,7 +176,7 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 						return
 					}
 				}
-			}(ch, done)
+			}(entry.q, entry.done)
 
 		case spatialserverv1.Kind_KIND_DATA:
 			select {
@@ -164,6 +186,12 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 			}:
 			default:
 			}
+
+		case spatialserverv1.Kind_KIND_RECONNECT:
+			s.game.MarkReconnected(types.EntityID(pkt.GetClientId()))
+
+		case spatialserverv1.Kind_KIND_PEER_DISCONNECTED:
+			s.game.MarkDisconnected(types.EntityID(pkt.GetClientId()))
 
 		case spatialserverv1.Kind_KIND_DISCONNECT:
 			s.clients.unregister(pkt.GetClientId())
@@ -191,6 +219,57 @@ func (s *gameServerServer) ReleaseZone(ctx context.Context, req *spatialserverv1
 		return &spatialserverv1.ReleaseZoneResponse{Success: false}, nil
 	}
 	return &spatialserverv1.ReleaseZoneResponse{Success: true}, nil
+}
+
+func (s *gameServerServer) QueryEntities(ctx context.Context, req *spatialserverv1.QueryEntitiesRequest) (*spatialserverv1.QueryEntitiesResponse, error) {
+	var snaps []*spatialserverv1.EntitySnapshot
+	for zid := range s.game.Zones {
+		snaps = s.game.QueryLocal(types.ZoneID(zid), int(req.GetGridX()), int(req.GetGridY()), req.GetRadius())
+		break
+	}
+	return &spatialserverv1.QueryEntitiesResponse{Entities: snaps}, nil
+}
+
+func (s *gameServerServer) NotifyEntityEnter(ctx context.Context, req *spatialserverv1.EntityEnterLeave) (*spatialserverv1.NotifyResponse, error) {
+	pos := req.GetPosition()
+	s.game.ApplyEntityEnter(types.ZoneID(req.GetZoneId()), types.EntityID(req.GetEntityId()), "", types.Vector3{X: pos.GetX(), Y: pos.GetY(), Z: pos.GetZ()})
+	return &spatialserverv1.NotifyResponse{Acknowledged: true}, nil
+}
+
+func (s *gameServerServer) NotifyEntityLeave(ctx context.Context, req *spatialserverv1.EntityEnterLeave) (*spatialserverv1.NotifyResponse, error) {
+	s.game.ApplyEntityLeave(types.ZoneID(req.GetZoneId()), types.EntityID(req.GetEntityId()))
+	return &spatialserverv1.NotifyResponse{Acknowledged: true}, nil
+}
+
+func (s *gameServerServer) SendEntityUpdate(ctx context.Context, req *spatialserverv1.EntityUpdate) (*spatialserverv1.Ack, error) {
+	pos := req.GetPosition()
+	if pos == nil {
+		return &spatialserverv1.Ack{Success: false}, nil
+	}
+	zoneID := s.game.ZoneOf(types.EntityID(req.GetEntityId()))
+	s.game.ApplyEntityUpdate(zoneID, types.EntityID(req.GetEntityId()), types.Vector3{X: pos.GetX(), Y: pos.GetY(), Z: pos.GetZ()})
+	return &spatialserverv1.Ack{Success: true}, nil
+}
+
+func (s *gameServerServer) MigrateEntity(ctx context.Context, req *spatialserverv1.MigrateEntityRequest) (*spatialserverv1.MigrateEntityResponse, error) {
+	s.game.MigrateEntityIn(req.GetEntity(), types.ZoneID(req.GetTargetZoneId()))
+	return &spatialserverv1.MigrateEntityResponse{Success: true}, nil
+}
+
+func (s *gameServerServer) ZoneStateSync(stream spatialserverv1.GameServer_ZoneStateSyncServer) error {
+	ctx := stream.Context()
+	for {
+		snap, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		s.game.LoadZoneSnapshot(snap)
+	}
 }
 
 func main() {

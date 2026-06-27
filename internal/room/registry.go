@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
+	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
 type ServerInfo struct {
@@ -122,6 +123,46 @@ func (zo *ZoneOwnership) Lookup(zoneID string) (types.ServerID, bool) {
 	owner, ok := zo.zones[zoneID]
 	zo.mu.RUnlock()
 	return owner, ok
+}
+
+type WatcherFanout struct {
+	mu       sync.Mutex
+	channels map[string]chan *spatialserverv1.OwnershipChange
+	nextID   int
+}
+
+func NewWatcherFanout() *WatcherFanout {
+	return &WatcherFanout{channels: make(map[string]chan *spatialserverv1.OwnershipChange)}
+}
+
+func (f *WatcherFanout) Subscribe() (string, <-chan *spatialserverv1.OwnershipChange) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.nextID++
+	id := fmt.Sprintf("w%d", f.nextID)
+	ch := make(chan *spatialserverv1.OwnershipChange, 16)
+	f.channels[id] = ch
+	return id, ch
+}
+
+func (f *WatcherFanout) Unsubscribe(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if ch, ok := f.channels[id]; ok {
+		close(ch)
+		delete(f.channels, id)
+	}
+}
+
+func (f *WatcherFanout) Broadcast(change *spatialserverv1.OwnershipChange) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, ch := range f.channels {
+		select {
+		case ch <- change:
+		default:
+		}
+	}
 }
 
 func ResolveZone(zo *ZoneOwnership, reg *ServerRegistry, zoneID string) (types.ServerID, string, int, error) {

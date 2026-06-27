@@ -1,0 +1,5 @@
+# ssh_pub_key = "ssh-ed25519 AAA..."
+# db_password = "change-me"
+# dns_zone    = "spatial.example.com"
+# lb_dns_name = "xxx.elb.amazonaws.com"
+# lb_zone_id  = "Z..."

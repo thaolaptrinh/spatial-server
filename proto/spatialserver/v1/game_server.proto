@@ -23,6 +23,8 @@ enum Kind {
   KIND_DATA = 1;
   KIND_CONNECT = 2;
   KIND_DISCONNECT = 3;
+  KIND_RECONNECT = 4;
+  KIND_PEER_DISCONNECTED = 5;
 }
 
 message RelayPacket {

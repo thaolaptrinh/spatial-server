@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-gateway-ingress
+{{- if .Values.tls.enabled }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.options: "maxVersion=VersionTLS13"
+{{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-gateway
+                port:
+                  number: {{ .Values.service.wsPort }}
+{{- if .Values.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.tls.hostName }}
+      secretName: {{ .Release.Name }}-gateway-tls
+{{- end }}
+{{- end }}

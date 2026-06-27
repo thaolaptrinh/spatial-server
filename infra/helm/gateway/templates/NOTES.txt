@@ -1,0 +1,3 @@
+Gateway deployed.
+Verify: kubectl get pods -l app=gateway
+Health: curl http://<gateway-ip>:8080/health

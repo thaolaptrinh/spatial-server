@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spatial-gateway
+  namespace: spatial-server
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: gateway.spatial.example.com
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - gateway.spatial.example.com
+      secretName: gateway-tls

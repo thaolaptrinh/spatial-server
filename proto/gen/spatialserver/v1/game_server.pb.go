@@ -24,10 +24,12 @@ const (
 type Kind int32
 
 const (
-	Kind_KIND_UNSPECIFIED Kind = 0
-	Kind_KIND_DATA        Kind = 1
-	Kind_KIND_CONNECT     Kind = 2
-	Kind_KIND_DISCONNECT  Kind = 3
+	Kind_KIND_UNSPECIFIED      Kind = 0
+	Kind_KIND_DATA             Kind = 1
+	Kind_KIND_CONNECT          Kind = 2
+	Kind_KIND_DISCONNECT       Kind = 3
+	Kind_KIND_RECONNECT        Kind = 4
+	Kind_KIND_PEER_DISCONNECTED Kind = 5
 )
 
 // Enum value maps for Kind.
@@ -37,12 +39,16 @@ var (
 		1: "KIND_DATA",
 		2: "KIND_CONNECT",
 		3: "KIND_DISCONNECT",
+		4: "KIND_RECONNECT",
+		5: "KIND_PEER_DISCONNECTED",
 	}
 	Kind_value = map[string]int32{
-		"KIND_UNSPECIFIED": 0,
-		"KIND_DATA":        1,
-		"KIND_CONNECT":     2,
-		"KIND_DISCONNECT":  3,
+		"KIND_UNSPECIFIED":      0,
+		"KIND_DATA":             1,
+		"KIND_CONNECT":          2,
+		"KIND_DISCONNECT":       3,
+		"KIND_RECONNECT":        4,
+		"KIND_PEER_DISCONNECTED": 5,
 	}
 )
 

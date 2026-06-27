@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-room-service
+  labels:
+    app: room-service
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: room-service
+  template:
+    metadata:
+      labels:
+        app: room-service
+    spec:
+      serviceAccountName: {{ .Release.Name }}-room-service
+      containers:
+        - name: room-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 9000
+            - name: mgmt
+              containerPort: 9001
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-room-service-config
+            - secretRef:
+                name: {{ .Values.secretRef }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+{{- if .Values.mtls.enabled }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/spatial/mtls
+              readOnly: true
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: mtls-{{ .Release.Name }}
+{{- end }}

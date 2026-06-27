@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 )
 
@@ -182,4 +183,17 @@ func TestEmptyCellDoesNotPanic(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("Query returned %d items, want 0", len(result))
 	}
+}
+
+func TestSerializeDeserialize_RoundTrip(t *testing.T) {
+	a := New(100, 300)
+	a.Enter(types.EntityID("e1"), types.Vector3{X: 10, Z: 10})
+	a.Enter(types.EntityID("e2"), types.Vector3{X: 250, Z: 250})
+
+	data, cellSize, radius := a.Serialize()
+	b := Deserialize(cellSize, radius, data)
+
+	ids := b.EntitiesInRange(types.Vector3{X: 10, Z: 10}, 500)
+	assert.Contains(t, ids, types.EntityID("e1"))
+	assert.Contains(t, ids, types.EntityID("e2"))
 }

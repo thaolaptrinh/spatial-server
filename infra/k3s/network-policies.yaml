@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: spatial-server
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-datastores
+  namespace: spatial-server
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - room-service
+                  - game-server
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis
+  namespace: spatial-server
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 6379

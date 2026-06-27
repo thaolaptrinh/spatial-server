@@ -41,12 +41,24 @@ type entityAOIState struct {
 	lastPosition types.Vector3
 }
 
+type ghostKind int
+
+const (
+	ghostLocal ghostKind = iota
+	ghostRemote
+)
+
 type ghostEntry struct {
-	entityID  types.EntityID
-	zoneID    types.ZoneID
-	position  types.Vector3
-	createdAt time.Time
-	expiresAt time.Time
+	kind       ghostKind
+	entityID   types.EntityID
+	originZone types.ZoneID
+	position   types.Vector3
+	createdAt  time.Time
+	expiresAt  time.Time
+}
+
+func (e ghostEntry) remote() (types.ZoneID, bool) {
+	return e.originZone, e.kind == ghostRemote
 }
 
 type zoneSim struct {
@@ -66,6 +78,10 @@ type Game struct {
 	entityZone    map[types.EntityID]types.ZoneID
 	entityAOI     map[types.EntityID]*entityAOIState
 	ghosts        map[types.EntityID]*ghostEntry
+	aoiIndex      map[types.ZoneID]*aoi.AOI
+	ghostStore    map[types.ZoneID]map[types.EntityID]*ghostEntry
+	peers         *PeerRegistry
+	peerZone      map[types.ZoneID]types.ServerID
 	Inbox         chan InboundPacket
 	Outbox        chan OutboundPacket
 	aoiRadius     float64
@@ -76,6 +92,11 @@ type Game struct {
 	snapshotter   SnapshotWriter
 	snapshotEvery int
 	tickCount     int64
+
+	sessionStates   map[types.EntityID]*sessionState
+	reconnectWindow time.Duration
+	lifecycleClock  func() time.Time
+	deltaBuffers    map[types.EntityID]*DeltaRingBuffer
 }
 
 type Option func(*Game)
@@ -96,12 +117,21 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		entityZone: make(map[types.EntityID]types.ZoneID),
 		entityAOI:  make(map[types.EntityID]*entityAOIState),
 		ghosts:     make(map[types.EntityID]*ghostEntry),
+		aoiIndex:   make(map[types.ZoneID]*aoi.AOI),
+		ghostStore: make(map[types.ZoneID]map[types.EntityID]*ghostEntry),
+		peers:      NewPeerRegistry(),
+		peerZone:   make(map[types.ZoneID]types.ServerID),
 		Inbox:      make(chan InboundPacket, InboxBufferSize),
 		Outbox:     make(chan OutboundPacket, InboxBufferSize),
 		aoiRadius:  DefaultAOIRadius,
 		tickRate:   DefaultTickRate,
 		ghostTTL:   5 * time.Second,
 		cmds:       make(chan func(), cmdChannelBuffer),
+
+		sessionStates:   make(map[types.EntityID]*sessionState),
+		reconnectWindow: 30 * time.Second,
+		lifecycleClock:  time.Now,
+		deltaBuffers:    make(map[types.EntityID]*DeltaRingBuffer),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -115,12 +145,21 @@ func (g *Game) AssignZone(z *zone.Zone) error {
 	if _, exists := g.Zones[z.ID]; exists {
 		return fmt.Errorf("zone %s: %w", z.ID, types.ErrConflict)
 	}
+	aoiGrid := aoi.New(DefaultCellSize, g.aoiRadius)
 	g.Zones[z.ID] = &zoneSim{
 		zone:     z,
-		aoi:      aoi.New(DefaultCellSize, g.aoiRadius),
+		aoi:      aoiGrid,
 		entities: make(map[types.EntityID]*entity.Entity),
 	}
+	g.aoiIndex[z.ID] = aoiGrid
+	g.ghostStore[z.ID] = make(map[types.EntityID]*ghostEntry)
 	return nil
+}
+
+func (g *Game) RegisterPeerZone(zoneID types.ZoneID, serverID types.ServerID) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.peerZone[zoneID] = serverID
 }
 
 func (g *Game) ReleaseZone(id types.ZoneID) error {
@@ -139,11 +178,14 @@ func (g *Game) ReleaseZone(id types.ZoneID) error {
 		delete(g.entityZone, eid)
 	}
 	for gid, ghost := range g.ghosts {
-		if ghost.zoneID == id {
+		if ghost.originZone == id {
 			delete(g.ghosts, gid)
 		}
 	}
 	delete(g.Zones, id)
+	delete(g.aoiIndex, id)
+	delete(g.ghostStore, id)
+	delete(g.peerZone, id)
 	_ = sim
 	return nil
 }
@@ -360,11 +402,12 @@ func (g *Game) detectZoneBoundaries(zid types.ZoneID) {
 		}
 		ghostID := types.EntityID(string(id) + "_ghost")
 		g.ghosts[ghostID] = &ghostEntry{
-			entityID:  id,
-			zoneID:    zid,
-			position:  state.lastPosition,
-			createdAt: time.Now(),
-			expiresAt: time.Now().Add(g.ghostTTL),
+			kind:       ghostLocal,
+			entityID:   id,
+			originZone: zid,
+			position:   state.lastPosition,
+			createdAt:  time.Now(),
+			expiresAt:  time.Now().Add(g.ghostTTL),
 		}
 		sim.aoi.Enter(ghostID, state.lastPosition)
 	}
@@ -378,7 +421,7 @@ func (g *Game) sweepGhosts() {
 		if !now.After(ghost.expiresAt) {
 			continue
 		}
-		if sim := g.Zones[ghost.zoneID]; sim != nil {
+		if sim := g.Zones[ghost.originZone]; sim != nil {
 			sim.aoi.Leave(id)
 		}
 		delete(g.ghosts, id)
@@ -470,6 +513,14 @@ func (g *Game) dispatch(pkt InboundPacket) {
 				sim.aoi.Move(e.ID, e.Position)
 			}
 		}
+		if buf, ok := g.deltaBuffers[e.ID]; ok {
+			buf.Push(&v1.EntityUpdate{
+				EntityId:  string(e.ID),
+				Position:  &v1.Vector3{X: e.Position.X, Y: e.Position.Y, Z: e.Position.Z},
+				Sequence:  upd.GetSequence(),
+				Timestamp: upd.GetTimestamp(),
+			})
+		}
 	}
 	if id == protocol.PacketIDEntityAction {
 		var act v1.EntityAction
@@ -534,6 +585,23 @@ func (g *Game) simulate(dt time.Duration) {
 			g.enqueueMove(id, e.Position)
 		}
 	}
+}
+
+func (g *Game) DeltaBufferFor(id types.EntityID) *DeltaRingBuffer {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	b, ok := g.deltaBuffers[id]
+	if !ok {
+		b = NewDeltaRingBuffer(1000)
+		g.deltaBuffers[id] = b
+	}
+	return b
+}
+
+func (g *Game) ForgetDeltaBuffer(id types.EntityID) {
+	g.mu.Lock()
+	delete(g.deltaBuffers, id)
+	g.mu.Unlock()
 }
 
 func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {

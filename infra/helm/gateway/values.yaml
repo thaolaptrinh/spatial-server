@@ -1,0 +1,37 @@
+replicaCount: 2
+image:
+  repository: ghcr.io/thaolaptrinh/spatial-gateway
+  tag: dev-latest
+  pullPolicy: IfNotPresent
+service:
+  type: LoadBalancer
+  wsPort: 8080
+  grpcPort: 9000
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuTarget: 70
+ingress:
+  enabled: true
+  className: traefik
+  host: gateway.example.com
+tls:
+  enabled: false
+  hostName: gateway.spatial.example.com
+  issuer: letsencrypt-prod
+mtls:
+  enabled: false
+secretRef: gateway-secret
+env:
+  grpc__host: "0.0.0.0"
+  grpc__port: "9000"
+  gateway__ws_port: "8080"
+  room_service__addr: "room-service:9000"

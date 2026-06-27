@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRouterCache_SetGet(t *testing.T) {
@@ -29,6 +30,27 @@ func TestRouterCache_Expired(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	_, ok := rc.Get("zone-1")
 	assert.False(t, ok)
+}
+
+func TestRouterCache_Invalidate(t *testing.T) {
+	rc := NewRouterCache(5 * time.Minute)
+	rc.Set("zone-1", "gs-1", "h1", 9001)
+	_, ok := rc.Get("zone-1")
+	require.True(t, ok)
+
+	rc.Invalidate("zone-1")
+	_, ok = rc.Get("zone-1")
+	assert.False(t, ok)
+}
+
+func TestRouterCache_ApplyChange(t *testing.T) {
+	rc := NewRouterCache(5 * time.Minute)
+	rc.Set("zone-1", "gs-old", "h-old", 9001)
+	rc.ApplyChange(&OwnershipChange{ZoneId: "zone-1", ServerId: "gs-new", Host: "h-new", Port: 9002})
+	entry, ok := rc.Get("zone-1")
+	require.True(t, ok)
+	assert.Equal(t, "gs-new", entry.ServerID)
+	assert.Equal(t, "h-new", entry.Host)
 }
 
 func TestRouterCache_Overwrite(t *testing.T) {

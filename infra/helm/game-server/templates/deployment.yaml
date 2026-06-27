@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-game-server
+  labels:
+    app: game-server
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: game-server
+  template:
+    metadata:
+      labels:
+        app: game-server
+    spec:
+      containers:
+        - name: game-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-game-server-config
+            - secretRef:
+                name: {{ .Values.secretRef }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: 9000
+            initialDelaySeconds: 5
+{{- if .Values.mtls.enabled }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/spatial/mtls
+              readOnly: true
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: mtls-{{ .Release.Name }}
+{{- end }}

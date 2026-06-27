@@ -1,0 +1,17 @@
+#cloud-config
+users:
+  - name: spatial
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys: ["${ssh_pub_key}"]
+ssh_pwauth: false
+disable_root: true
+packages:
+  - docker.io
+  - fail2ban
+  - curl
+  - jq
+runcmd:
+  - sysctl -w fs.file-max=2097152
+  - printf 'spatial soft/hard nofile 1048576\n' > /etc/security/limits.d/99-spatial.conf
+  - systemctl enable --now docker fail2ban

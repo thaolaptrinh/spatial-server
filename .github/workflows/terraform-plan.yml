@@ -1,0 +1,17 @@
+name: Terraform Plan
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt
+        run: terraform -chdir=infra/terraform/environments/staging fmt -check -recursive
+      - name: Terraform init
+        run: terraform -chdir=infra/terraform/environments/staging init -backend=false
+      - name: Terraform validate
+        run: terraform -chdir=infra/terraform/environments/staging validate

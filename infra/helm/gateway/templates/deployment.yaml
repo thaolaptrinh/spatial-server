@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-gateway
+  labels:
+    app: gateway
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+    spec:
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: ws
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-gateway-config
+            - secretRef:
+                name: {{ .Values.secretRef }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 15
+{{- if .Values.mtls.enabled }}
+          volumeMounts:
+            - name: mtls-certs
+              mountPath: /etc/spatial/mtls
+              readOnly: true
+          env:
+            - name: SPATIAL_GRPC__TLS_ENABLED
+              value: "true"
+            - name: SPATIAL_GRPC__TLS_CERT
+              value: /etc/spatial/mtls/tls.crt
+            - name: SPATIAL_GRPC__TLS_KEY
+              value: /etc/spatial/mtls/tls.key
+            - name: SPATIAL_GRPC__TLS_CA
+              value: /etc/spatial/mtls/ca.crt
+      volumes:
+        - name: mtls-certs
+          secret:
+            secretName: mtls-{{ .Release.Name }}
+{{- end }}

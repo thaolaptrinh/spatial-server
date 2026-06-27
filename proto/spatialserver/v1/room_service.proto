@@ -15,6 +15,7 @@ service RoomService {
   rpc ReportMetrics(ReportMetricsRequest) returns (ReportMetricsResponse);
   rpc TransferZone(stream spatialserver.v1.ZoneSnapshot) returns (TransferZoneResponse);
   rpc PrepareTransfer(PrepareTransferRequest) returns (PrepareTransferResponse);
+  rpc WatchOwnership(WatchRequest) returns (stream OwnershipChange);
 }
 
 message RegisterRequest {
@@ -83,4 +84,13 @@ message PrepareTransferRequest {
 
 message PrepareTransferResponse {
   bool accepted = 1;
+}
+
+message WatchRequest {}
+
+message OwnershipChange {
+  string zone_id = 1;
+  string server_id = 2;
+  string host = 3;
+  int32 port = 4;
 }

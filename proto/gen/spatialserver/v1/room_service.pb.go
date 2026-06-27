@@ -733,6 +733,110 @@ func (x *PrepareTransferResponse) GetAccepted() bool {
 	return false
 }
 
+type WatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchRequest) Reset() {
+	*x = WatchRequest{}
+	mi := &file_spatialserver_v1_room_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchRequest) ProtoMessage() {}
+
+func (x *WatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_room_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
+func (*WatchRequest) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_room_service_proto_rawDescGZIP(), []int{14}
+}
+
+type OwnershipChange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ZoneId        string                 `protobuf:"bytes,1,opt,name=zone_id,json=zoneId,proto3" json:"zone_id,omitempty"`
+	ServerId      string                 `protobuf:"bytes,2,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Host          string                 `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,4,opt,name=port,proto3" json:"port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OwnershipChange) Reset() {
+	*x = OwnershipChange{}
+	mi := &file_spatialserver_v1_room_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OwnershipChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OwnershipChange) ProtoMessage() {}
+
+func (x *OwnershipChange) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_room_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OwnershipChange.ProtoReflect.Descriptor instead.
+func (*OwnershipChange) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_room_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *OwnershipChange) GetZoneId() string {
+	if x != nil {
+		return x.ZoneId
+	}
+	return ""
+}
+
+func (x *OwnershipChange) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *OwnershipChange) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *OwnershipChange) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
 var File_spatialserver_v1_room_service_proto protoreflect.FileDescriptor
 
 const file_spatialserver_v1_room_service_proto_rawDesc = "" +
@@ -780,7 +884,13 @@ const file_spatialserver_v1_room_service_proto_rawDesc = "" +
 	"\azone_id\x18\x01 \x01(\tR\x06zoneId\x12(\n" +
 	"\x10target_server_id\x18\x02 \x01(\tR\x0etargetServerId\"5\n" +
 	"\x17PrepareTransferResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\bR\baccepted2\xec\x05\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\"\x0e\n" +
+	"\fWatchRequest\"o\n" +
+	"\x0fOwnershipChange\x12\x17\n" +
+	"\azone_id\x18\x01 \x01(\tR\x06zoneId\x12\x1b\n" +
+	"\tserver_id\x18\x02 \x01(\tR\bserverId\x12\x12\n" +
+	"\x04host\x18\x03 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x04 \x01(\x05R\x04port2\xc3\x06\n" +
 	"\vRoomService\x12Q\n" +
 	"\bRegister\x12!.spatialserver.v1.RegisterRequest\x1a\".spatialserver.v1.RegisterResponse\x12T\n" +
 	"\tHeartbeat\x12\".spatialserver.v1.HeartbeatRequest\x1a#.spatialserver.v1.HeartbeatResponse\x12X\n" +
@@ -790,7 +900,8 @@ const file_spatialserver_v1_room_service_proto_rawDesc = "" +
 	"\fLookupServer\x12%.spatialserver.v1.LookupServerRequest\x1a&.spatialserver.v1.LookupServerResponse\x12`\n" +
 	"\rReportMetrics\x12&.spatialserver.v1.ReportMetricsRequest\x1a'.spatialserver.v1.ReportMetricsResponse\x12X\n" +
 	"\fTransferZone\x12\x1e.spatialserver.v1.ZoneSnapshot\x1a&.spatialserver.v1.TransferZoneResponse(\x01\x12f\n" +
-	"\x0fPrepareTransfer\x12(.spatialserver.v1.PrepareTransferRequest\x1a).spatialserver.v1.PrepareTransferResponseBSZQgithub.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1b\x06proto3"
+	"\x0fPrepareTransfer\x12(.spatialserver.v1.PrepareTransferRequest\x1a).spatialserver.v1.PrepareTransferResponse\x12U\n" +
+	"\x0eWatchOwnership\x12\x1e.spatialserver.v1.WatchRequest\x1a!.spatialserver.v1.OwnershipChange0\x01BSZQgithub.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1;spatialserverv1b\x06proto3"
 
 var (
 	file_spatialserver_v1_room_service_proto_rawDescOnce sync.Once
@@ -804,7 +915,7 @@ func file_spatialserver_v1_room_service_proto_rawDescGZIP() []byte {
 	return file_spatialserver_v1_room_service_proto_rawDescData
 }
 
-var file_spatialserver_v1_room_service_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_spatialserver_v1_room_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_spatialserver_v1_room_service_proto_goTypes = []any{
 	(*RegisterRequest)(nil),         // 0: spatialserver.v1.RegisterRequest
 	(*RegisterResponse)(nil),        // 1: spatialserver.v1.RegisterResponse
@@ -820,33 +931,37 @@ var file_spatialserver_v1_room_service_proto_goTypes = []any{
 	(*TransferZoneResponse)(nil),    // 11: spatialserver.v1.TransferZoneResponse
 	(*PrepareTransferRequest)(nil),  // 12: spatialserver.v1.PrepareTransferRequest
 	(*PrepareTransferResponse)(nil), // 13: spatialserver.v1.PrepareTransferResponse
-	nil,                             // 14: spatialserver.v1.RegisterRequest.MetadataEntry
-	(*ServerID)(nil),                // 15: spatialserver.v1.ServerID
-	(ServerStatus)(0),               // 16: spatialserver.v1.ServerStatus
-	(*ZoneSnapshot)(nil),            // 17: spatialserver.v1.ZoneSnapshot
+	(*WatchRequest)(nil),            // 14: spatialserver.v1.WatchRequest
+	(*OwnershipChange)(nil),         // 15: spatialserver.v1.OwnershipChange
+	nil,                             // 16: spatialserver.v1.RegisterRequest.MetadataEntry
+	(*ServerID)(nil),                // 17: spatialserver.v1.ServerID
+	(ServerStatus)(0),               // 18: spatialserver.v1.ServerStatus
+	(*ZoneSnapshot)(nil),            // 19: spatialserver.v1.ZoneSnapshot
 }
 var file_spatialserver_v1_room_service_proto_depIdxs = []int32{
-	14, // 0: spatialserver.v1.RegisterRequest.metadata:type_name -> spatialserver.v1.RegisterRequest.MetadataEntry
-	15, // 1: spatialserver.v1.LookupZoneResponse.server:type_name -> spatialserver.v1.ServerID
-	16, // 2: spatialserver.v1.LookupServerResponse.status:type_name -> spatialserver.v1.ServerStatus
+	16, // 0: spatialserver.v1.RegisterRequest.metadata:type_name -> spatialserver.v1.RegisterRequest.MetadataEntry
+	17, // 1: spatialserver.v1.LookupZoneResponse.server:type_name -> spatialserver.v1.ServerID
+	18, // 2: spatialserver.v1.LookupServerResponse.status:type_name -> spatialserver.v1.ServerStatus
 	0,  // 3: spatialserver.v1.RoomService.Register:input_type -> spatialserver.v1.RegisterRequest
 	2,  // 4: spatialserver.v1.RoomService.Heartbeat:input_type -> spatialserver.v1.HeartbeatRequest
-	15, // 5: spatialserver.v1.RoomService.PrepareShutdown:input_type -> spatialserver.v1.ServerID
+	17, // 5: spatialserver.v1.RoomService.PrepareShutdown:input_type -> spatialserver.v1.ServerID
 	5,  // 6: spatialserver.v1.RoomService.LookupZone:input_type -> spatialserver.v1.LookupZoneRequest
 	7,  // 7: spatialserver.v1.RoomService.LookupServer:input_type -> spatialserver.v1.LookupServerRequest
 	9,  // 8: spatialserver.v1.RoomService.ReportMetrics:input_type -> spatialserver.v1.ReportMetricsRequest
-	17, // 9: spatialserver.v1.RoomService.TransferZone:input_type -> spatialserver.v1.ZoneSnapshot
+	19, // 9: spatialserver.v1.RoomService.TransferZone:input_type -> spatialserver.v1.ZoneSnapshot
 	12, // 10: spatialserver.v1.RoomService.PrepareTransfer:input_type -> spatialserver.v1.PrepareTransferRequest
-	1,  // 11: spatialserver.v1.RoomService.Register:output_type -> spatialserver.v1.RegisterResponse
-	3,  // 12: spatialserver.v1.RoomService.Heartbeat:output_type -> spatialserver.v1.HeartbeatResponse
-	4,  // 13: spatialserver.v1.RoomService.PrepareShutdown:output_type -> spatialserver.v1.PrepareShutdownResponse
-	6,  // 14: spatialserver.v1.RoomService.LookupZone:output_type -> spatialserver.v1.LookupZoneResponse
-	8,  // 15: spatialserver.v1.RoomService.LookupServer:output_type -> spatialserver.v1.LookupServerResponse
-	10, // 16: spatialserver.v1.RoomService.ReportMetrics:output_type -> spatialserver.v1.ReportMetricsResponse
-	11, // 17: spatialserver.v1.RoomService.TransferZone:output_type -> spatialserver.v1.TransferZoneResponse
-	13, // 18: spatialserver.v1.RoomService.PrepareTransfer:output_type -> spatialserver.v1.PrepareTransferResponse
-	11, // [11:19] is the sub-list for method output_type
-	3,  // [3:11] is the sub-list for method input_type
+	14, // 11: spatialserver.v1.RoomService.WatchOwnership:input_type -> spatialserver.v1.WatchRequest
+	1,  // 12: spatialserver.v1.RoomService.Register:output_type -> spatialserver.v1.RegisterResponse
+	3,  // 13: spatialserver.v1.RoomService.Heartbeat:output_type -> spatialserver.v1.HeartbeatResponse
+	4,  // 14: spatialserver.v1.RoomService.PrepareShutdown:output_type -> spatialserver.v1.PrepareShutdownResponse
+	6,  // 15: spatialserver.v1.RoomService.LookupZone:output_type -> spatialserver.v1.LookupZoneResponse
+	8,  // 16: spatialserver.v1.RoomService.LookupServer:output_type -> spatialserver.v1.LookupServerResponse
+	10, // 17: spatialserver.v1.RoomService.ReportMetrics:output_type -> spatialserver.v1.ReportMetricsResponse
+	11, // 18: spatialserver.v1.RoomService.TransferZone:output_type -> spatialserver.v1.TransferZoneResponse
+	13, // 19: spatialserver.v1.RoomService.PrepareTransfer:output_type -> spatialserver.v1.PrepareTransferResponse
+	15, // 20: spatialserver.v1.RoomService.WatchOwnership:output_type -> spatialserver.v1.OwnershipChange
+	12, // [12:21] is the sub-list for method output_type
+	3,  // [3:12] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -864,7 +979,7 @@ func file_spatialserver_v1_room_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spatialserver_v1_room_service_proto_rawDesc), len(file_spatialserver_v1_room_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

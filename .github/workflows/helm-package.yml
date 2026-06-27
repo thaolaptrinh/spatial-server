@@ -1,0 +1,22 @@
+name: Package Helm Charts
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v3
+      - name: Lint and package charts
+        run: |
+          mkdir -p .artifacts
+          for c in infra/helm/*/; do
+            helm lint "$c"
+            helm package "$c" -d .artifacts/
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: .artifacts/

@@ -3,7 +3,11 @@ package gateway
 import (
 	"sync"
 	"time"
+
+	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
+
+type OwnershipChange = spatialserverv1.OwnershipChange
 
 type CacheEntry struct {
 	ServerID string
@@ -36,6 +40,16 @@ func (rc *RouterCache) Set(zoneID, serverID, host string, port int) {
 		expiresAt: time.Now().Add(rc.ttl),
 	}
 	rc.mu.Unlock()
+}
+
+func (rc *RouterCache) Invalidate(zoneID string) {
+	rc.mu.Lock()
+	delete(rc.entries, zoneID)
+	rc.mu.Unlock()
+}
+
+func (rc *RouterCache) ApplyChange(c *OwnershipChange) {
+	rc.Set(c.GetZoneId(), c.GetServerId(), c.GetHost(), int(c.GetPort()))
 }
 
 func (rc *RouterCache) Get(zoneID string) (CacheEntry, bool) {

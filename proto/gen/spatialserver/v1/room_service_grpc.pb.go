@@ -27,6 +27,7 @@ const (
 	RoomService_ReportMetrics_FullMethodName   = "/spatialserver.v1.RoomService/ReportMetrics"
 	RoomService_TransferZone_FullMethodName    = "/spatialserver.v1.RoomService/TransferZone"
 	RoomService_PrepareTransfer_FullMethodName = "/spatialserver.v1.RoomService/PrepareTransfer"
+	RoomService_WatchOwnership_FullMethodName  = "/spatialserver.v1.RoomService/WatchOwnership"
 )
 
 // RoomServiceClient is the client API for RoomService service.
@@ -41,6 +42,7 @@ type RoomServiceClient interface {
 	ReportMetrics(ctx context.Context, in *ReportMetricsRequest, opts ...grpc.CallOption) (*ReportMetricsResponse, error)
 	TransferZone(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ZoneSnapshot, TransferZoneResponse], error)
 	PrepareTransfer(ctx context.Context, in *PrepareTransferRequest, opts ...grpc.CallOption) (*PrepareTransferResponse, error)
+	WatchOwnership(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[OwnershipChange], error)
 }
 
 type roomServiceClient struct {
@@ -134,6 +136,25 @@ func (c *roomServiceClient) PrepareTransfer(ctx context.Context, in *PrepareTran
 	return out, nil
 }
 
+func (c *roomServiceClient) WatchOwnership(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[OwnershipChange], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RoomService_ServiceDesc.Streams[1], RoomService_WatchOwnership_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchRequest, OwnershipChange]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RoomService_WatchOwnershipClient = grpc.ServerStreamingClient[OwnershipChange]
+
 // RoomServiceServer is the server API for RoomService service.
 // All implementations must embed UnimplementedRoomServiceServer
 // for forward compatibility.
@@ -146,6 +167,7 @@ type RoomServiceServer interface {
 	ReportMetrics(context.Context, *ReportMetricsRequest) (*ReportMetricsResponse, error)
 	TransferZone(grpc.ClientStreamingServer[ZoneSnapshot, TransferZoneResponse]) error
 	PrepareTransfer(context.Context, *PrepareTransferRequest) (*PrepareTransferResponse, error)
+	WatchOwnership(*WatchRequest, grpc.ServerStreamingServer[OwnershipChange]) error
 	mustEmbedUnimplementedRoomServiceServer()
 }
 
@@ -179,6 +201,9 @@ func (UnimplementedRoomServiceServer) TransferZone(grpc.ClientStreamingServer[Zo
 }
 func (UnimplementedRoomServiceServer) PrepareTransfer(context.Context, *PrepareTransferRequest) (*PrepareTransferResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareTransfer not implemented")
+}
+func (UnimplementedRoomServiceServer) WatchOwnership(*WatchRequest, grpc.ServerStreamingServer[OwnershipChange]) error {
+	return status.Error(codes.Unimplemented, "method WatchOwnership not implemented")
 }
 func (UnimplementedRoomServiceServer) mustEmbedUnimplementedRoomServiceServer() {}
 func (UnimplementedRoomServiceServer) testEmbeddedByValue()                     {}
@@ -334,6 +359,17 @@ func _RoomService_PrepareTransfer_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoomService_WatchOwnership_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RoomServiceServer).WatchOwnership(m, &grpc.GenericServerStream[WatchRequest, OwnershipChange]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RoomService_WatchOwnershipServer = grpc.ServerStreamingServer[OwnershipChange]
+
 // RoomService_ServiceDesc is the grpc.ServiceDesc for RoomService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -375,6 +411,11 @@ var RoomService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "TransferZone",
 			Handler:       _RoomService_TransferZone_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchOwnership",
+			Handler:       _RoomService_WatchOwnership_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "spatialserver/v1/room_service.proto",

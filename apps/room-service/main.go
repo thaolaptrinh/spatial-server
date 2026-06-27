@@ -33,6 +33,7 @@ type roomServiceServer struct {
 	spatialserverv1.UnimplementedRoomServiceServer
 	servers room.ServerStore
 	zones   room.ZoneStore
+	fanout  *room.WatcherFanout
 }
 
 func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.RegisterRequest) (*spatialserverv1.RegisterResponse, error) {
@@ -81,6 +82,25 @@ func (s *roomServiceServer) LookupZone(ctx context.Context, req *spatialserverv1
 		Host:   server.Host,
 		Port:   int32(server.Port),
 	}, nil
+}
+
+func (s *roomServiceServer) WatchOwnership(req *spatialserverv1.WatchRequest, stream spatialserverv1.RoomService_WatchOwnershipServer) error {
+	id, ch := s.fanout.Subscribe()
+	defer s.fanout.Unsubscribe(id)
+	ctx := stream.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case change, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(change); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func main() {
@@ -141,6 +161,7 @@ func main() {
 	service := &roomServiceServer{
 		servers: storageroom.NewServerRepository(pgPool),
 		zones:   storageroom.NewZoneRepository(pgPool),
+		fanout:  room.NewWatcherFanout(),
 	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -54,12 +55,22 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 
 	errCh := make(chan error, 2)
 
+	ip := clientID
+	connLimiter := newConnectionLimiter(100, 100, time.Now)
+	ipLimiter := h.ipLimiter
+
 	go func() {
 		for {
 			data, err := conn.Read(ctx)
 			if err != nil {
 				errCh <- err
 				return
+			}
+			if !connLimiter.allow() {
+				continue
+			}
+			if h.ipLimiter != nil && !ipLimiter.allow(ip) {
+				continue
 			}
 			if err := stream.Send(&spatialserverv1.RelayPacket{
 				ClientId: clientID,
@@ -79,7 +90,10 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 				errCh <- err
 				return
 			}
-			if err := conn.Write(ctx, pkt.GetPayload()); err != nil {
+			writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err = conn.Write(writeCtx, pkt.GetPayload())
+			cancel()
+			if err != nil {
 				errCh <- err
 				return
 			}
@@ -90,6 +104,6 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 
 	_ = stream.Send(&spatialserverv1.RelayPacket{
 		ClientId: clientID,
-		Kind:     spatialserverv1.Kind_KIND_DISCONNECT,
+		Kind:     spatialserverv1.Kind_KIND_PEER_DISCONNECTED,
 	})
 }

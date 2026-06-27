@@ -1,0 +1,25 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+  promtail:
+    image: grafana/promtail:3.0.0
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"

@@ -1,6 +1,8 @@
 package aoi
 
 import (
+	"bytes"
+	"encoding/gob"
 	"math"
 	"sort"
 
@@ -127,4 +129,36 @@ func (a *AOI) CellCoord(pos types.Vector3) (int, int) {
 
 func (a *AOI) Count() int {
 	return len(a.positions)
+}
+
+type serializedAOI struct {
+	CellSize  float64
+	Radius    float64
+	Positions map[types.EntityID]types.Vector3
+}
+
+func (a *AOI) Serialize() ([]byte, float64, float64) {
+	s := serializedAOI{
+		CellSize:  a.cellSize,
+		Radius:    a.radius,
+		Positions: make(map[types.EntityID]types.Vector3, len(a.positions)),
+	}
+	for id, pos := range a.positions {
+		s.Positions[id] = pos
+	}
+	var buf bytes.Buffer
+	_ = gob.NewEncoder(&buf).Encode(s)
+	return buf.Bytes(), a.cellSize, a.radius
+}
+
+func Deserialize(cellSize, radius float64, data []byte) *AOI {
+	var s serializedAOI
+	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&s); err != nil {
+		return New(cellSize, radius)
+	}
+	a := New(s.CellSize, s.Radius)
+	for id, pos := range s.Positions {
+		a.Enter(id, pos)
+	}
+	return a
 }

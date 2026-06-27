@@ -1,0 +1,13 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: game-server-critical
+value: 1000000
+globalDefault: false
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: room-service-high
+value: 900000
+globalDefault: false

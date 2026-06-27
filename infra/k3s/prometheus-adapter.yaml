@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prom-adapter-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    rules:
+      - seriesQuery: 'gateway_connections_active'
+        resources:
+          overrides:
+            namespace: { resource: namespace }
+            pod: { resource: pod }
+        metricsQuery: 'max(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+        name: { as: "websocket_connections" }
+      - seriesQuery: 'game_server_entities_total'
+        resources:
+          overrides:
+            namespace: { resource: namespace }
+            pod: { resource: pod }
+        metricsQuery: 'sum(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+        name: { as: "entity_count" }
