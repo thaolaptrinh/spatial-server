@@ -248,7 +248,7 @@ INI files with struct mapping. Thread-safe via mutex. Two-level config (common d
 | **Reflection-based RPC** | We use compiled protobuf gRPC. Reflection-based RPC is slower, type-unsafe, and harder to document. |
 | **MongoDB storage** | We use PostgreSQL as the source of truth (ADR-001). |
 | **Entity embeds Space (IS-A)** | We treat Zone and Entity as separate concepts. Embedding creates unnecessary coupling. |
-| **INI-based deployment config** | K8s-native deployment (ADR-014). No process manager dependency. |
+| **INI-based deployment config** | K3s-native deployment (ADR-014). No process manager dependency. |
 | **msgpack serialization** | We use protobuf for all serialization. Single serialization format is simpler. |
 | **Supervisor process management** | We use K3s orchestration (ADR-014). |
 | **Reflection-based entity creation** | We will use factory functions or type registries, not reflection. Better compile-time safety. |

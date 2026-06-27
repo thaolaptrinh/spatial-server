@@ -22,7 +22,7 @@ Document the infrastructure stack and configuration for Spatial Server deploymen
 | Secret Management | Kubernetes Secret |
 | Configuration | ConfigMap |
 
-## Kubernetes Architecture (Production Baseline)
+## K3s (Kubernetes) Architecture (Production Baseline)
 
 | Resource | Purpose |
 |----------|---------|

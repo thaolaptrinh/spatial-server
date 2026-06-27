@@ -113,7 +113,7 @@ Lightweight metadata coordinator that manages zone ownership, Game Server regist
 - Initiate zone transfers for load balancing and scale-in/down
 - Respond to `LookupZone` queries from Gateways
 - Accept `CreateRuntime` / `DestroyRuntime` from Business Backend
-- Elect a leader via K8s Lease API in production (active/passive HA)
+- Elect a leader via K3s Lease API in production (active/passive HA)
 
 ### Non-Responsibilities
 
@@ -131,7 +131,7 @@ Lightweight metadata coordinator that manages zone ownership, Game Server regist
 
 ### Failure Mode
 
-- Room Service leader crash: follower takes over within <5s (K8s Lease API leader election). Gateway routing cache (5s TTL) covers short outages — existing gameplay continues uninterrupted
+- Room Service leader crash: follower takes over within <5s (K3s Lease API leader election). Gateway routing cache (5s TTL) covers short outages — existing gameplay continues uninterrupted
 - During full Room Service outage:
   - New `CreateRuntime` / `DestroyRuntime` calls fail (Business Backend must retry)
   - New zone lookups fail (Gateway cache may miss for cold zones)

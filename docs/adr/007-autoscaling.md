@@ -27,7 +27,7 @@ Manual capacity management is error-prone and wasteful. The platform needs autom
 ### Scale-Up Flow
 
 1. Room Service detects metric threshold breached.
-2. Room Service signals orchestrator (Docker Compose scale, or HPA in K8s).
+2. Room Service signals orchestrator (Docker Compose scale, or HPA in K3s).
 3. New Game Server starts and registers (JOINING state).
 4. Room Service selects most loaded ACTIVE servers.
 5. Room Service picks zones to transfer (least loaded zones first).
@@ -44,7 +44,7 @@ Manual capacity management is error-prone and wasteful. The platform needs autom
 ### Production Path
 
 - Dev/staging: Room Service manages scale manually (CLI or API call).
-- Production (K8s): HPA with custom metrics (Prometheus adapter) triggers pod scaling.
+- Production (K3s): HPA with custom metrics (Prometheus adapter) triggers pod scaling.
 - Room Service provides `/metrics` endpoint for Prometheus scraping.
 
 ## Alternatives

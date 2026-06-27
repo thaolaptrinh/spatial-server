@@ -62,8 +62,8 @@ Define consistent naming conventions across all Go code, protobuf definitions, c
 
 | Element | Convention | Good | Bad |
 |---------|------------|------|-----|
-| K8s namespace | kebab-case | `spatial-server` | `spatialServer`, `spatial_server` |
-| K8s resource names | kebab-case | `game-server`, `room-service` | `gameServer` |
+| K3s namespace | kebab-case | `spatial-server` | `spatialServer`, `spatial_server` |
+| K3s resource names | kebab-case | `game-server`, `room-service` | `gameServer` |
 | Helm release | kebab-case | `spatial-server` | `spatial_server` |
 | Terraform resource | snake_case | `resource "helm_release" "game_server"` | `resource "helm_release" "gameServer"` |
 | Docker images | lowercase | `spatial/game-server` | `spatial/GameServer` |

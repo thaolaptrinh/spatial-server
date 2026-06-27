@@ -14,7 +14,7 @@ Game Servers must discover and register with the cluster reliably. Without a rob
 
 ## Decision
 
-- Game Server resolves Room Service via DNS (static or K8s Service) on startup.
+- Game Server resolves Room Service via DNS (static or K3s Service) on startup.
 - Game Server sends `Register(serverID, address, metadata)` gRPC to Room Service.
 - Room Service stores registration in memory + PostgreSQL (`game_servers` table).
 - Registration fields: server_id, host:port, capacity (max zones), load metrics, joined_at.
@@ -24,7 +24,7 @@ Game Servers must discover and register with the cluster reliably. Without a rob
 ## Alternatives
 
 1. **etcd/Consul service discovery**: Use an external service registry. More dependencies, higher operational complexity, and another system to maintain.
-2. **K8s-native (Endpoints API)**: Rely on Kubernetes endpoints for discovery. Ties the design to K8s, not portable to Docker Compose or local dev.
+2. **K3s-native (Endpoints API)**: Rely on Kubernetes endpoints for discovery. Ties the design to K3s, not portable to Docker Compose or local dev.
 3. **mDNS/DNS-SD**: Zero-configuration discovery. Unreliable in container orchestration environments.
 
 ## Tradeoffs
@@ -43,7 +43,7 @@ Game Servers must discover and register with the cluster reliably. Without a rob
 
 - Room Service cluster with shared registration state in PostgreSQL.
 - Backoff and jitter for re-registration storms after Room Service restart.
-- Readiness probes for K8s to prevent routing to unregistered servers.
+- Readiness probes for K3s to prevent routing to unregistered servers.
 
 ## Replaces
 

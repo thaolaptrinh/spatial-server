@@ -122,7 +122,7 @@ make build
 | 1 | Core infrastructure (scaffold, DB, config, logging, protobuf, Gateway, Room Service, Game Server, Docker Compose, CI) | 🔧 In Progress |
 | 2 | Realtime features (AOI, position sync, entity spawn/despawn, zone crossing, chat) | 📋 Planned |
 | 3 | Distributed scaling (multi-Game Server, zone transfer, heartbeat, leader election, rebalancing, metrics) | 📋 Planned |
-| 4 | Production hardening (K8s, HPA, load testing, chaos testing, TLS, monitoring alerts) | 📋 Planned |
+| 4 | Production hardening (K3s, HPA, load testing, chaos testing, TLS, monitoring alerts) | 📋 Planned |
 
 ## License
 

@@ -169,6 +169,6 @@ Secrets are NEVER committed to the repository. Config YAMLs reference secrets vi
 
 ## References
 
-- [ADR-014](../adr/014-infrastructure-platform.md) — Infrastructure Platform (K8s ConfigMap/Secret strategy)
+- [ADR-014](../adr/014-infrastructure-platform.md) — Infrastructure Platform (K3s ConfigMap/Secret strategy)
 - [ADR-008](../adr/008-deployment.md) — Deployment (ConfigMap loading)
 - [Coding Standards](coding.md) — Package dependency rules for `pkg/config`

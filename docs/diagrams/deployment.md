@@ -103,7 +103,7 @@ graph TB
     PROMT --> LOKI
 ```
 
-## Kubernetes Resource Mapping
+## K3s / Kubernetes Resource Mapping
 
 | Resource | Purpose |
 |----------|---------|

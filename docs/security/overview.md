@@ -145,10 +145,10 @@ All limits are configurable via dynamic config and can be updated without restar
 | Secret | Storage | Rotation |
 |--------|---------|----------|
 | JWT public key (Business Backend) | JWKS cache + config | Via Business Backend JWKS rotation |
-| Database credentials (PostgreSQL) | K8s Secret / env var | Manual rotation via `ALTER USER ... WITH PASSWORD` |
-| Redis password | K8s Secret / env var | Manual rotation |
+| Database credentials (PostgreSQL) | K3s Secret / env var | Manual rotation via `ALTER USER ... WITH PASSWORD` |
+| Redis password | K3s Secret / env var | Manual rotation |
 | TLS private keys (Let's Encrypt) | cert-manager managed | Auto-renewal every 60 days |
-| Admin API key | K8s Secret / env var | Manual rotation |
+| Admin API key | K3s Secret / env var | Manual rotation |
 
 ### Rotation Procedures
 

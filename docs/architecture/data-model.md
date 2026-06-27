@@ -91,7 +91,7 @@ A zone is a grid cell within a runtime. Each zone is owned by exactly one Game S
 
 ## Entity
 
-An entity is a dynamic object simulated within a runtime — a player, NPC, item, or any interactive object.
+An entity is a dynamic object simulated within a runtime — a player, NPC, item, or any interactive object. *(Currently only `player` entities are implemented; `npc` exists as a static demo seed only.)*
 
 | Field | Type | Storage | Description |
 |-------|------|---------|-------------|
@@ -110,7 +110,7 @@ An entity is a dynamic object simulated within a runtime — a player, NPC, item
 
 **Entity ID:** UUIDv7 — provides time-ordered unique IDs with no central counter. The v7 format encodes a Unix millisecond timestamp in the most significant bits, enabling rough time-based sorting without a separate timestamp index.
 
-**Lifecycle:** Created when a player joins (or NPC/item is spawned). Lives in-memory on the owning Game Server. Updated every tick (position, attributes). Serialized to PostgreSQL at configurable intervals (default 5s). Destroyed when player leaves or entity despawns.
+**Lifecycle:** Created when a player joins (or NPC/item is spawned). Lives in-memory on the owning Game Server. Updated every tick (position, attributes). Serialized to PostgreSQL at configurable intervals (default 5s) *(not yet implemented — entities are in-memory only)*. Destroyed when player leaves or entity despawns.
 
 **Storage:** Primary storage is **in-memory** on the Game Server. Serialized to the `zone_state` PostgreSQL table for crash recovery. Redis does NOT store entity state. Entity data never passes through Redis.
 

@@ -6,7 +6,7 @@ Approved
 
 ## Context
 
-The platform must support local development, Docker Compose for staging/CI, and Kubernetes for production.
+The platform must support local development, Docker Compose for staging/CI, and K3s (lightweight Kubernetes) for production.
 
 ## Problem
 
@@ -29,7 +29,7 @@ The deployment strategy must support local development, staging/CI, and producti
 - Game Server can scale via `docker-compose up --scale game-server=N`.
 - Health checks for all services.
 
-### Kubernetes (Production)
+### K3s / Kubernetes (Production)
 
 - Target: K3s.
 - Declarative manifests (not Helm charts for MVP).
@@ -62,13 +62,13 @@ The deployment strategy must support local development, staging/CI, and producti
 ## Consequences
 
 - Development setup is simple (no Docker overhead).
-- Docker Compose and K8s share the same images — easy transition.
-- K8s manifests are reference-quality but not Helm-packaged (simpler for small team).
+- Docker Compose and K3s share the same images — easy transition.
+- K3s manifests are reference-quality but not Helm-packaged (simpler for small team).
 
 ## Future Considerations
 
 - Helm chart for production deployment.
-- GitOps workflow (ArgoCD) for K8s deployments.
+- GitOps workflow (ArgoCD) for K3s deployments.
 - Blue-green or rolling deployment strategy for zero-downtime updates.
 
 ## Replaces

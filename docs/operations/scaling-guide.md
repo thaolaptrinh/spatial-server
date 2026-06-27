@@ -28,7 +28,7 @@ Horizontal scaling first, vertical scaling only when horizontal is infeasible. S
 - Memory > 80% for 30s.
 
 **How to scale:**
-- K8s: HPA with custom metric `websocket_connections` (Prometheus adapter).
+- K3s: HPA with custom metric `websocket_connections` (Prometheus adapter).
 - Docker Compose: `docker compose scale gateway=N`.
 - Room Service discovers new Gateway via service registration.
 - No session affinity needed — clients reconnect to any Gateway via session token.
@@ -124,7 +124,7 @@ Pre-scaling steps:
 
 1. Recalculate capacity: expected peak connections / players / entities.
 2. Set target replica counts based on capacity thresholds.
-3. Apply via Helm values override or K8s HPA min replicas override.
+3. Apply via Helm values override or K3s HPA min replicas override.
 4. Monitor: verify new replicas register and pass health checks.
 5. After event: gradually reduce to normal levels.
 

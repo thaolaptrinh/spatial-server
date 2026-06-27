@@ -140,7 +140,7 @@ Compare GoWorld and Pitaya with Spatial Server's architecture to identify lesson
 
 | Decision | GoWorld | Pitaya | Spatial Server | Alignment |
 |----------|---------|--------|----------------|-----------|
-| **Orchestration** | Supervisor | Docker Compose | K3s (ADR-014) | Neither. K8s-native. |
+| **Orchestration** | Supervisor | Docker Compose | K3s (ADR-014) | Neither. K3s-native. |
 | **Configuration** | INI | Viper/YAML | Koanf/YAML | Pitaya is closer (both use YAML), but we use koanf. |
 | **Logging** | zap | Logrus | slog | Neither. We use stdlib slog. |
 | **Monitoring** | Basic CPU | Prometheus + Statsd + OTel | Prometheus + Grafana + Loki (ADR-019) | Pitaya's Prometheus integration is the closest match. |
@@ -186,7 +186,7 @@ Compare GoWorld and Pitaya with Spatial Server's architecture to identify lesson
 
 5. **INI configuration** (GoWorld). Already using koanf/YAML.
 
-6. **Process manager dependency** (GoWorld's Supervisor). We use K8s.
+6. **Process manager dependency** (GoWorld's Supervisor). We use K3s.
 
 7. **External service discovery dependency** (Pitaya's etcd). We use DNS + gRPC.
 

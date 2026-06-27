@@ -61,7 +61,7 @@ Monitoring Network
 
 1. **Flat network (all services accessible)**: Simplest to configure but highest security risk — any compromised service exposes all others.
 2. **Service mesh (Istio/Linkerd)**: Fine-grained network control with automatic mTLS and observability. High operational complexity for an MVP.
-3. **Network policies only (K8s NetworkPolicy)**: Software-defined network isolation at the pod level. Effective but K8s-only, not portable to Docker Compose.
+3. **Network policies only (K3s NetworkPolicy)**: Software-defined network isolation at the pod level. Effective but K3s-only, not portable to Docker Compose.
 
 ## Tradeoffs
 

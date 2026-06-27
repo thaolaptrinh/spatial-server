@@ -176,20 +176,20 @@
 - Zone transfer between Game Servers
 - Gateway routing by zone (lookup → cache → forward)
 - Game Server heartbeat + crash recovery (orphan zone detection)
-- Room Service leader election (Kubernetes Lease API)
+- Room Service leader election (K3s Lease API)
 - Load-based zone rebalancing
 - Cross-server ghost entity migration
 - Prometheus metrics + Grafana dashboards
 - Simulation framework (v1 for basic load testing)
 
-**Non-goals:** Kubernetes, production hardening, autoscaling.
+**Non-goals:** Production K3s deployment, production hardening, autoscaling.
 
 ---
 
 ## Phase 3: Production Hardening (Planned)
 
 **Deliverables:**
-- K8s manifests (reference, not full implementation)
+- K3s manifests (reference, not full implementation)
 - HPA configuration (custom metrics)
 - Load testing + optimization (via simulation framework)
 - Chaos testing (partition, crash, latency injection)

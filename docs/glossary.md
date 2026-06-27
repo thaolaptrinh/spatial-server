@@ -12,7 +12,7 @@
 | **Business Backend** | External application that owns authentication, user management, and room/showroom metadata. Spatial Server's upstream caller. |
 | **Degraded Mode** | Operational mode when a dependency (PostgreSQL/Redis) is unavailable. |
 | **Degraded Write Queue** | Bounded buffer for queued writes during PostgreSQL outage. |
-| **Entity** | A simulated object within a runtime (player avatar, NPC, interactive object). Has position, attributes, and a type. |
+| **Entity** | A simulated object within a runtime (player avatar, NPC, interactive object). *Note: only player entities are currently implemented; the seeded NPC is a static demo placeholder.* Has position, attributes, and a type. |
 | **Game Server** | Core service that simulates entities within its owned zones. |
 | **Gateway** | Edge service that terminates WebSocket connections from clients. |
 | **Gateway Cache** | Cached routing table in Gateway (TTL: 5s). |
@@ -20,14 +20,14 @@
 | **Grid Size** | The dimensions of a single zone cell (default 100x100 units). |
 | **gRPC Streaming** | Server-streaming RPC for zone state transfer. |
 | **Heartbeat** | Periodic signal from Game Server to Room Service indicating liveness. |
-| **HPA** | Horizontal Pod Autoscaler for Kubernetes. |
+| **HPA** | Horizontal Pod Autoscaler for Kubernetes (K3s). |
 | **Leader Election** | Process of selecting a single active coordinator among replicas. |
 | **mTLS** | Mutual TLS for internal service authentication. |
 | **Orphan Zone** | Zone whose owning Game Server has failed. |
 | **Player** | A human participant connected to a runtime. Each player has a Gateway session and a Game Server entity in a 1:1:1 relationship. |
 | **Session** | The logical connection between a player and Spatial Server, spanning a Gateway WebSocket connection and a Game Server entity. Sessions survive brief disconnections via reconnection tokens. |
 | **Ownership** | The binding of a zone to exactly one Game Server at any time. |
-| **PDB** | PodDisruptionBudget for Kubernetes. |
+| **PDB** | PodDisruptionBudget for Kubernetes (K3s). |
 | **Replay Protection** | Sequence number mechanism preventing packet replay. |
 | **Room Service** | Coordinator service that manages zone ownership and load balancing. |
 | **Runtime** | An instantiated realtime session (corresponding to a business room). Composed of one or more zones. |

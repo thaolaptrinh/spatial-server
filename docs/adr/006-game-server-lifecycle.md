@@ -51,7 +51,7 @@ Game Servers transition through multiple states during their lifetime. Without a
 
 1. **Immutable Game Servers**: Always create new servers for scale-out, never drain or transfer zones. Simple but wasteful for zone churn and slow to rebalance.
 2. **State machine with external store**: Store lifecycle state exclusively in PostgreSQL/Redis with transitions enforced by the store. More durable but adds latency per transition.
-3. **Lifecycle managed by orchestrator (K8s)**: Rely solely on K8s pod lifecycle hooks. Less control over graceful shutdown timing and zone transfer coordination.
+3. **Lifecycle managed by orchestrator (K3s)**: Rely solely on K3s pod lifecycle hooks. Less control over graceful shutdown timing and zone transfer coordination.
 
 ## Tradeoffs
 

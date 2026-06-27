@@ -54,7 +54,7 @@ Defines quantitative performance targets for each service. These budgets serve a
 | P99 LookupZone | <5ms | >20ms triggers investigation | Cache hit expected on hot path |
 | P99 CreateRuntime | <500ms | >2s triggers investigation | Zone allocation + DB writes |
 | P99 Heartbeat processing | <1ms | Batch per tick | 100 servers × 1 heartbeat/5s = 20/s |
-| Failover | <5s | Leader election via K8s Lease API | Follower is warm standby |
+| Failover | <5s | Leader election via K3s Lease API | Follower is warm standby |
 | Uptime | 99.95% | HA pair | Gateway cache covers short outages |
 
 ### PostgreSQL

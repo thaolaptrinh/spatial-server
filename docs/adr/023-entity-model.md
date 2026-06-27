@@ -16,6 +16,8 @@ Existing ADRs define zone ownership (ADR-001), AOI strategy (ADR-003), and packe
 
 Without a defined entity model, each Game Server implementation may choose different entity structures, leading to interoperability issues between Game Servers, inconsistent serialization formats, and difficulty adding new entity types. The entity model must be flexible enough for MVP entity types (players, NPCs, interactive objects) without requiring protobuf recompilation for each new type.
 
+> **Implementation Status (2026-06-27):** The entity model described here is the *target design*. Currently only `player` entities are fully implemented with lifecycle hooks. The single `npc` entity in the codebase is a static demo placeholder (`apps/game-server/main.go`) — there is no NPC AI, simulation loop, or autonomous behavior. NPC/autonomous simulation is deferred to Phase 2.
+
 ## Decision
 
 ### Entity Structure
@@ -61,7 +63,7 @@ spawn → simulate → despawn
 
 2. **Simulate**: The entity exists and is updated each tick.
    - Player-controlled entities: updates come from client packets (position, rotation, actions).
-   - NPC/autonomous entities: updates come from the Game Server's simulation loop.
+   - NPC/autonomous entities: updates come from the Game Server's simulation loop *(planned — not yet implemented)*.
    - Each tick, the Game Server checks if the entity crossed a zone boundary (zone migration per ADR-002).
    - Changed attributes are batched and sent to interested clients as state delta packets.
    - AOI index is updated if position changed.

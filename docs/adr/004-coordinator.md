@@ -22,7 +22,7 @@ A central coordinator can easily become a bottleneck and single point of failure
   - Gateway routing hints (which Game Server owns which zone)
 - Room Service does NOT handle runtime data forwarding.
 - Cross-zone RPCs go directly Game Server → Game Server (not through Room Service).
-- HA: single instance in dev, K8s Lease API for leader election in production.
+- HA: single instance in dev, K3s Lease API for leader election in production.
 
 ## Alternatives
 
@@ -34,7 +34,7 @@ A central coordinator can easily become a bottleneck and single point of failure
 
 - Lightweight coordinator is not a bottleneck but adds complexity for cross-server operations.
 - No runtime data through Room Service improves scalability but requires Game Servers to communicate directly.
-- K8s Lease API for leader election ties HA strategy to Kubernetes.
+- K3s Lease API for leader election ties HA strategy to Kubernetes (K3s).
 
 ## Consequences
 

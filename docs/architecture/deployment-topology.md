@@ -181,7 +181,7 @@ graph TB
 | TLS | Yes (cert-manager + Let's Encrypt, or internal CA) |
 | Load balancer | External (HAProxy, Nginx, or cloud LB) |
 | Gateway replicas | 2 (behind LB, max 20K concurrent connections) |
-| Room Service replicas | 2 (HA pair, leader election via K8s Lease API) |
+| Room Service replicas | 2 (HA pair, leader election via K3s Lease API) |
 | Game Server replicas | N (autoscaled, PodDisruptionBudget: min 1 available) |
 | PostgreSQL | Primary + 1 replica (streaming replication, auto-failover) |
 | Redis | Sentinel topology (1 primary, 2 replicas per sentinel) |

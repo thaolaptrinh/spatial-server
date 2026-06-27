@@ -24,7 +24,7 @@ In a distributed spatial system, failures are inevitable. Each component (Gatewa
 ### Room Service Crash
 
 - **Development**: Single instance → manual restart. Gateway cache still valid for 5s TTL.
-- **Production**: K8s Lease API → follower becomes leader within seconds.
+- **Production**: K3s Lease API → follower becomes leader within seconds.
 - **Recovery**: New leader reads ownership table from PostgreSQL. Gateway cache bridges the gap.
 - **Client impact**: No gameplay impact during failover (direct P2P RPCs continue, only zone lookups affected).
 

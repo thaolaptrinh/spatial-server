@@ -51,7 +51,7 @@ Health: /health (TCP or HTTP)
 
 ```
 Active/Passive pair
-Production: Kubernetes Lease API (coordination.k8s.io)
+Production: K3s (Kubernetes) Lease API (coordination.k8s.io)
 Leader handles: zone assignment, load balancing, service discovery
 Follower: warm standby
 Failover: <5 seconds

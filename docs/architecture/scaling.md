@@ -28,7 +28,7 @@ Defines how each service scales horizontally and vertically, what triggers scali
 | Property | Detail |
 |----------|--------|
 | **Strategy** | Active/Passive pair with leader election |
-| **Election mechanism** | Kubernetes Lease API (`coordination.k8s.io`) in production; single instance in dev |
+| **Election mechanism** | K3s (Kubernetes) Lease API (`coordination.k8s.io`) in production; single instance in dev |
 | **Replicas** | 2 (production) |
 | **Failover time** | <5 seconds |
 | **Leader handles** | Zone assignment, load balancing decisions, service discovery writes |
