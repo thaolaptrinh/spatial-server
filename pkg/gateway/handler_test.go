@@ -23,6 +23,27 @@ func (f *fakeLookuper) LookupZone(ctx context.Context, zoneID string) (string, i
 	return f.host, f.port, f.err
 }
 
+type stubLookuper struct{}
+
+func (s *stubLookuper) LookupZone(_ context.Context, _ string) (string, int32, error) {
+	return "127.0.0.1", 9000, nil
+}
+
+func TestHandler_LiveEndpoint(t *testing.T) {
+	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/live", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_Ready_503WhenDraining(t *testing.T) {
+	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"))
+	h.SetDraining(true)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
 func TestHealthHandler(t *testing.T) {
 	cache := NewRouterCache(time.Second)
 	h := NewHandler(cache, nil, nil)
