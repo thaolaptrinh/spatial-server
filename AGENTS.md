@@ -4,15 +4,30 @@
 
 ```
 apps/              Service binaries (gateway, room-service, game-server)
-pkg/               Shared Go libraries
-internal/          Private types and utilities (not importable outside module)
+internal/           Service implementation + shared infrastructure (not importable outside module)
+  gateway/          Gateway WebSocket handler, relay, router cache
+  room/             Room Service registry, ownership, SpatialServerAPI
+  game/             Game Server simulation, NPC, entity, AOI, zone
+  auth/             JWT validation (cross-cutting)
+  session/          Session pool (cross-cutting)
+  transport/        WebSocket abstraction (Connection interface)
+  storage/          PG/Redis pools, migrations, room/game domain repos
+  grpc/             gRPC interceptors (recovery, logging, metrics)
+  config/           Configuration loading (koanf)
+  logging/          Structured logging (slog)
+  metrics/          Prometheus metrics
+  types/            Shared types (IDs, Vector3, statuses, errors)
+  migration/        Migration runner
+pkg/
+  protocol/         Binary packet protocol (ONLY pkg/ — external reuse)
 proto/             gRPC protobuf definitions (.proto + gen/ for generated code)
 configs/           YAML config files per service
-deploy/            Docker Compose + Dockerfiles
-infra/             Terraform, Helm, cloud-init
+build/docker/      Dockerfiles
+deploy/            Docker Compose
 docs/              All documentation (architecture, ADRs, standards, ops, testing)
-.github/workflows/ CI/CD
-scripts/           dev-up.sh, dev-down.sh, migrate.sh
+scripts/           dev-up.sh, dev-down.sh
+tests/             Integration tests
+tools/             CLI tools (client)
 ```
 
 ## Build / Lint / Test Commands
@@ -22,16 +37,16 @@ scripts/           dev-up.sh, dev-down.sh, migrate.sh
 make build
 
 # Run all unit tests
-go test ./pkg/... -v -race -cover
+go test ./internal/... -v -race -cover
 
 # Run a single package's tests
-go test ./pkg/gateway/... -v -race -cover
+go test ./internal/gateway/... -v -race -cover
 
 # Run a single test function
-go test ./pkg/room/... -v -run TestLookupZone
+go test ./internal/room/... -v -run TestLookupZone
 
 # Run a specific test with sub-test
-go test ./pkg/entity/... -v -run "TestEntityID/GivenValidInput_ReturnsID"
+go test ./internal/game/entity/... -v -run "TestEntityID/GivenValidInput_ReturnsID"
 
 # Integration tests (requires Docker for PostgreSQL/Redis)
 go test ./tests/integration/... -v -race
@@ -67,7 +82,7 @@ import (
     "google.golang.org/grpc"
 
     "spatial-server/internal/types"
-    "spatial-server/pkg/entity"
+    "spatial-server/internal/game/entity"
 )
 ```
 
@@ -103,11 +118,12 @@ Full details: `docs/standards/error-handling.md`. Quick reference:
 
 ### Dependency Rules
 Full details: `docs/standards/dependency-rules.md`. Cardinal rule:
-- `apps/* → pkg/* → internal/*` — dependencies flow DOWNWARD only
-- `pkg/entity/` and `pkg/aoi/` depend only on `internal/types/` and stdlib (zero infrastructure deps)
-- `pkg/gateway/` may use `nhooyr.io/websocket`
-- `pkg/storage/` may use `pgx` and `go-redis`
-- `internal/` may ONLY use standard library
+- `apps/* → internal/* → standard library + external deps` — dependencies flow DOWNWARD only
+- Service boundary law: services must NEVER import another service's implementation
+- `internal/game/entity/` and `internal/game/aoi/` depend only on `internal/types/` and stdlib (zero infrastructure deps)
+- `internal/gateway/` depends on `internal/transport/` abstraction, not `coder/websocket` directly
+- `internal/storage/` may use `pgx` and `go-redis`
+- `pkg/protocol/` may use protobuf + stdlib (external reuse)
 
 ## Documentation Conventions
 
@@ -157,9 +173,7 @@ Full details: `docs/testing/`. Quick reference:
 
 ## CI
 
-Workflows in `.github/workflows/`:
-- `docs-check.yml`: link check (lychee) + Mermaid validation (mmdc)
-- Trigger: push/PR to `main`
+Workflows removed — no CI needed at this stage.
 
 ## Key Standards Documents
 

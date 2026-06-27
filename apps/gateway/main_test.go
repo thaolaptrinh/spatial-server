@@ -9,7 +9,7 @@ import (
 
 func TestGatewayWired(t *testing.T) {
 	cache := gateway.NewRouterCache(time.Second)
-	h := gateway.NewHandler(cache, nil, []byte("test"))
+	h := gateway.NewHandler(cache, nil, []byte("test"), nil)
 	if h == nil {
 		t.Fatal("handler is nil")
 	}

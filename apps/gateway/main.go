@@ -20,6 +20,7 @@ import (
 	"github.com/thaolaptrinh/spatial-server/internal/gateway"
 	"github.com/thaolaptrinh/spatial-server/internal/logging"
 	"github.com/thaolaptrinh/spatial-server/internal/metrics"
+	"github.com/thaolaptrinh/spatial-server/internal/transport/websocket/coder"
 )
 
 type roomLookuper struct {
@@ -61,7 +62,7 @@ func main() {
 	healthClient := grpc_health_v1.NewHealthClient(rsConn)
 
 	cache := gateway.NewRouterCache(5 * time.Second)
-	handler := gateway.NewHandler(cache, lookuper, []byte(cfg.Gateway.JWTSecret))
+	handler := gateway.NewHandler(cache, lookuper, []byte(cfg.Gateway.JWTSecret), coder.Accepter{})
 	handler.SetReadyFn(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

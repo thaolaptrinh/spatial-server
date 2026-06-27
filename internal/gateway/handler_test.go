@@ -30,14 +30,14 @@ func (s *stubLookuper) LookupZone(_ context.Context, _ string) (string, int32, e
 }
 
 func TestHandler_LiveEndpoint(t *testing.T) {
-	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"))
+	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"), nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/live", nil))
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestHandler_Ready_503WhenDraining(t *testing.T) {
-	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"))
+	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"), nil)
 	h.SetDraining(true)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
@@ -46,7 +46,7 @@ func TestHandler_Ready_503WhenDraining(t *testing.T) {
 
 func TestHealthHandler(t *testing.T) {
 	cache := NewRouterCache(time.Second)
-	h := NewHandler(cache, nil, nil)
+	h := NewHandler(cache, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -58,7 +58,7 @@ func TestHealthHandler(t *testing.T) {
 
 func TestHealthHandler_Method(t *testing.T) {
 	cache := NewRouterCache(time.Second)
-	h := NewHandler(cache, nil, nil)
+	h := NewHandler(cache, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/health", nil)
 	w := httptest.NewRecorder()
@@ -69,7 +69,7 @@ func TestHealthHandler_Method(t *testing.T) {
 
 func TestWSHandler_NoToken(t *testing.T) {
 	cache := NewRouterCache(time.Second)
-	h := NewHandler(cache, nil, nil)
+	h := NewHandler(cache, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
 	w := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestWSHandler_NoToken(t *testing.T) {
 
 func TestNotFound(t *testing.T) {
 	cache := NewRouterCache(time.Second)
-	h := NewHandler(cache, nil, nil)
+	h := NewHandler(cache, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
 	w := httptest.NewRecorder()
@@ -91,7 +91,7 @@ func TestNotFound(t *testing.T) {
 
 func TestHandleWS_Health(t *testing.T) {
 	cache := NewRouterCache(time.Second)
-	h := NewHandler(cache, nil, nil)
+	h := NewHandler(cache, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
