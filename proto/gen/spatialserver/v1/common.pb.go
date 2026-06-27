@@ -746,6 +746,158 @@ func (x *Ack) GetSuccess() bool {
 	return false
 }
 
+type EntityAction struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EntityId      string                 `protobuf:"bytes,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	Sequence      int32                  `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntityAction) Reset() {
+	*x = EntityAction{}
+	mi := &file_spatialserver_v1_common_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntityAction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntityAction) ProtoMessage() {}
+
+func (x *EntityAction) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_common_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntityAction.ProtoReflect.Descriptor instead.
+func (*EntityAction) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_common_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *EntityAction) GetEntityId() string {
+	if x != nil {
+		return x.EntityId
+	}
+	return ""
+}
+
+func (x *EntityAction) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *EntityAction) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *EntityAction) GetSequence() int32 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *EntityAction) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+type EntityState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EntityId      string                 `protobuf:"bytes,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Animation     string                 `protobuf:"bytes,2,opt,name=animation,proto3" json:"animation,omitempty"`
+	Health        int32                  `protobuf:"varint,3,opt,name=health,proto3" json:"health,omitempty"`
+	Attributes    map[string][]byte      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntityState) Reset() {
+	*x = EntityState{}
+	mi := &file_spatialserver_v1_common_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntityState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntityState) ProtoMessage() {}
+
+func (x *EntityState) ProtoReflect() protoreflect.Message {
+	mi := &file_spatialserver_v1_common_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntityState.ProtoReflect.Descriptor instead.
+func (*EntityState) Descriptor() ([]byte, []int) {
+	return file_spatialserver_v1_common_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *EntityState) GetEntityId() string {
+	if x != nil {
+		return x.EntityId
+	}
+	return ""
+}
+
+func (x *EntityState) GetAnimation() string {
+	if x != nil {
+		return x.Animation
+	}
+	return ""
+}
+
+func (x *EntityState) GetHealth() int32 {
+	if x != nil {
+		return x.Health
+	}
+	return 0
+}
+
+func (x *EntityState) GetAttributes() map[string][]byte {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *EntityState) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_spatialserver_v1_common_proto protoreflect.FileDescriptor
 
 const file_spatialserver_v1_common_proto_rawDesc = "" +
@@ -791,7 +943,24 @@ const file_spatialserver_v1_common_proto_rawDesc = "" +
 	"\bsequence\x18\x03 \x01(\x05R\bsequence\x12\x1c\n" +
 	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"\x1f\n" +
 	"\x03Ack\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess*\xa2\x01\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x97\x01\n" +
+	"\fEntityAction\x12\x1b\n" +
+	"\tentity_id\x18\x01 \x01(\tR\bentityId\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1a\n" +
+	"\bsequence\x18\x04 \x01(\x05R\bsequence\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\x8c\x02\n" +
+	"\vEntityState\x12\x1b\n" +
+	"\tentity_id\x18\x01 \x01(\tR\bentityId\x12\x1c\n" +
+	"\tanimation\x18\x02 \x01(\tR\tanimation\x12\x16\n" +
+	"\x06health\x18\x03 \x01(\x05R\x06health\x12M\n" +
+	"\n" +
+	"attributes\x18\x04 \x03(\v2-.spatialserver.v1.EntityState.AttributesEntryR\n" +
+	"attributes\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01*\xa2\x01\n" +
 	"\rRuntimeStatus\x12\x1e\n" +
 	"\x1aRUNTIME_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17RUNTIME_STATUS_CREATING\x10\x01\x12\x19\n" +
@@ -825,7 +994,7 @@ func file_spatialserver_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_spatialserver_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_spatialserver_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_spatialserver_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_spatialserver_v1_common_proto_goTypes = []any{
 	(RuntimeStatus)(0),       // 0: spatialserver.v1.RuntimeStatus
 	(ZoneStatus)(0),          // 1: spatialserver.v1.ZoneStatus
@@ -840,20 +1009,24 @@ var file_spatialserver_v1_common_proto_goTypes = []any{
 	(*ZoneSnapshot)(nil),     // 10: spatialserver.v1.ZoneSnapshot
 	(*EntityUpdate)(nil),     // 11: spatialserver.v1.EntityUpdate
 	(*Ack)(nil),              // 12: spatialserver.v1.Ack
-	nil,                      // 13: spatialserver.v1.EntitySnapshot.AttributesEntry
+	(*EntityAction)(nil),     // 13: spatialserver.v1.EntityAction
+	(*EntityState)(nil),      // 14: spatialserver.v1.EntityState
+	nil,                      // 15: spatialserver.v1.EntitySnapshot.AttributesEntry
+	nil,                      // 16: spatialserver.v1.EntityState.AttributesEntry
 }
 var file_spatialserver_v1_common_proto_depIdxs = []int32{
 	7,  // 0: spatialserver.v1.EntitySnapshot.position:type_name -> spatialserver.v1.Vector3
-	13, // 1: spatialserver.v1.EntitySnapshot.attributes:type_name -> spatialserver.v1.EntitySnapshot.AttributesEntry
+	15, // 1: spatialserver.v1.EntitySnapshot.attributes:type_name -> spatialserver.v1.EntitySnapshot.AttributesEntry
 	7,  // 2: spatialserver.v1.EntityEnterLeave.position:type_name -> spatialserver.v1.Vector3
 	4,  // 3: spatialserver.v1.ZoneSnapshot.zone_id:type_name -> spatialserver.v1.ZoneID
 	8,  // 4: spatialserver.v1.ZoneSnapshot.entities:type_name -> spatialserver.v1.EntitySnapshot
 	7,  // 5: spatialserver.v1.EntityUpdate.position:type_name -> spatialserver.v1.Vector3
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	16, // 6: spatialserver.v1.EntityState.attributes:type_name -> spatialserver.v1.EntityState.AttributesEntry
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_spatialserver_v1_common_proto_init() }
@@ -867,7 +1040,7 @@ func file_spatialserver_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spatialserver_v1_common_proto_rawDesc), len(file_spatialserver_v1_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

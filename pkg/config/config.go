@@ -9,6 +9,8 @@ import (
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+
+	"github.com/thaolaptrinh/spatial-server/internal/types"
 )
 
 const (
@@ -70,6 +72,15 @@ type GameConfig struct {
 	MaxEntities  int           `koanf:"max_entities"`
 	ZoneCellSize float64       `koanf:"zone_cell_size"`
 	AOIRadius    float64       `koanf:"aoi_radius"`
+	NPCs         []NPCSpec     `koanf:"npcs"`
+}
+
+type NPCSpec struct {
+	Type     string          `koanf:"type"`
+	Behavior string          `koanf:"behavior"`
+	Position types.Vector3   `koanf:"position"`
+	Waypoints []types.Vector3 `koanf:"waypoints"`
+	Radius   float64         `koanf:"radius"`
 }
 
 type SpatialServerAPIConfig struct {

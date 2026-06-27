@@ -25,6 +25,7 @@ func main() {
 	zoneID := flag.String("zone", "z1", "Zone ID for JWT zone_id claim")
 	secret := flag.String("secret", "dev-secret-key-change-in-production", "JWT signing secret (must match gateway config)")
 	interval := flag.Duration("interval", 1*time.Second, "Position update interval")
+	action := flag.String("action", "", "EntityAction to send on connect (e.g. jump)")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,13 +88,29 @@ func main() {
 				pos := upd.GetPosition()
 				log.Printf("MOVE %s → (%.0f, %.0f, %.0f)", upd.GetEntityId(), pos.GetX(), pos.GetY(), pos.GetZ())
 
-			case protocol.PacketIDEntityDespawn:
-				var idMsg spatialserverv1.EntityID
-				if err := proto.Unmarshal(payload, &idMsg); err != nil {
-					log.Printf("unmarshal despawn: %v", err)
-					continue
-				}
-				log.Printf("DESPAWN %s", idMsg.GetId())
+		case protocol.PacketIDEntityDespawn:
+			var idMsg spatialserverv1.EntityID
+			if err := proto.Unmarshal(payload, &idMsg); err != nil {
+				log.Printf("unmarshal despawn: %v", err)
+				continue
+			}
+			log.Printf("DESPAWN %s", idMsg.GetId())
+
+		case protocol.PacketIDEntityAction:
+			var act spatialserverv1.EntityAction
+			if err := proto.Unmarshal(payload, &act); err != nil {
+				log.Printf("unmarshal action: %v", err)
+				continue
+			}
+			log.Printf("ACTION %s %s", act.GetEntityId(), act.GetAction())
+
+		case protocol.PacketIDEntityState:
+			var st spatialserverv1.EntityState
+			if err := proto.Unmarshal(payload, &st); err != nil {
+				log.Printf("unmarshal state: %v", err)
+				continue
+			}
+			log.Printf("STATE %s anim=%s hp=%d", st.GetEntityId(), st.GetAnimation(), st.GetHealth())
 
 			default:
 				log.Printf("UNKNOWN packetID=%d len=%d", id, len(payload))
@@ -142,6 +159,19 @@ func main() {
 					log.Printf("write error: %v", err)
 					cancel()
 					return
+				}
+				if *action != "" && tick == 1 {
+					actPayload, _ := proto.Marshal(&spatialserverv1.EntityAction{
+						EntityId:  *player,
+						Action:    *action,
+						Timestamp: time.Now().UnixMilli(),
+					})
+					actFrame := protocol.Encode(protocol.PacketIDEntityAction, actPayload, false, 1)
+					if err := conn.Write(ctx, websocket.MessageBinary, actFrame); err != nil {
+						log.Printf("action write error: %v", err)
+					} else {
+						log.Printf("sent action: %s", *action)
+					}
 				}
 			}
 		}

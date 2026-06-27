@@ -16,3 +16,12 @@ game:
   max_entities: 5000
   zone_cell_size: 100
   aoi_radius: 300
+  npcs:
+    - type: npc
+      behavior: patrol
+      position: {x: 100, y: 0, z: 100}
+      waypoints: [{x: 100, y: 0, z: 100}, {x: 110, y: 0, z: 110}]
+    - type: npc
+      behavior: wander
+      position: {x: 90, y: 0, z: 90}
+      radius: 15

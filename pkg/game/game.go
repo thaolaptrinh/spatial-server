@@ -172,6 +172,7 @@ func (g *Game) tick() {
 		case pkt := <-g.Inbox:
 			g.dispatch(pkt)
 		default:
+			g.simulate(g.tickRate)
 			g.detectZoneBoundaries()
 			g.updateVisibility()
 			g.sweepGhosts()
@@ -250,7 +251,7 @@ func (g *Game) updateVisibility() {
 					select {
 					case g.Outbox <- OutboundPacket{
 						ClientID: string(e.ID),
-						Data:     encodeSpawn(other),
+						Data:     encodeSpawnFrame(other),
 					}:
 					default:
 					}
@@ -263,7 +264,7 @@ func (g *Game) updateVisibility() {
 				select {
 				case g.Outbox <- OutboundPacket{
 					ClientID: string(e.ID),
-					Data:     encodeDespawn(id),
+					Data:     encodeDespawnFrame(id),
 				}:
 				default:
 				}
@@ -294,20 +295,72 @@ func (g *Game) dispatch(pkt InboundPacket) {
 		e.Position.Z = upd.GetPosition().GetZ()
 		g.aoi.Move(e.ID, e.Position)
 	}
-}
-
-func encodeSpawn(e *entity.Entity) []byte {
-	msg := &v1.EntitySnapshot{
-		EntityId: string(e.ID),
-		Type:     e.Type,
-		Position: &v1.Vector3{X: e.Position.X, Y: e.Position.Y, Z: e.Position.Z},
+	if id == protocol.PacketIDEntityAction {
+		var act v1.EntityAction
+		if err := proto.Unmarshal(payload, &act); err != nil {
+			return
+		}
+		e, ok := g.Entities[types.EntityID(act.GetEntityId())]
+		if !ok {
+			return
+		}
+		if e.OwnerID != types.ServerID(pkt.ClientID) {
+			return
+		}
+		if e.Lifecycle != nil {
+			e.Lifecycle.OnAction(act.GetAction(), act.GetPayload())
+		}
 	}
-	b, _ := proto.Marshal(msg)
-	return protocol.Encode(protocol.PacketIDEntitySpawn, b, false, 0)
+	if id == protocol.PacketIDEntityState {
+		var st v1.EntityState
+		if err := proto.Unmarshal(payload, &st); err != nil {
+			return
+		}
+		e, ok := g.Entities[types.EntityID(st.GetEntityId())]
+		if !ok {
+			return
+		}
+		frame := encodeStateFrame(e.ID, st.GetAnimation(), st.GetHealth())
+		for _, obsID := range g.aoi.EntitiesInRange(e.Position, g.aoiRadius) {
+			if obsID == e.ID {
+				continue
+			}
+			select {
+			case g.Outbox <- OutboundPacket{ClientID: string(obsID), Data: frame}:
+			default:
+			}
+		}
+	}
 }
 
-func encodeDespawn(id types.EntityID) []byte {
-	msg := &v1.EntityID{Id: string(id)}
-	b, _ := proto.Marshal(msg)
-	return protocol.Encode(protocol.PacketIDEntityDespawn, b, false, 0)
+func (g *Game) simulate(dt time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for id, e := range g.Entities {
+		lc, ok := e.Lifecycle.(*NPCLifecycle)
+		if !ok || lc == nil || lc.Behavior == nil {
+			continue
+		}
+		before := e.Position
+		if lc.Behavior.Step(e, dt) {
+			g.aoi.Move(id, e.Position)
+			g.enqueueMove(id, e.Position)
+		}
+		_ = before
+	}
 }
+
+func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {
+	frame := encodeMoveFrame(id, pos)
+	for _, obsID := range g.aoi.EntitiesInRange(pos, g.aoiRadius) {
+		if obsID == id {
+			continue
+		}
+		select {
+		case g.Outbox <- OutboundPacket{ClientID: string(obsID), Data: frame}:
+		default:
+		}
+	}
+}
+
+

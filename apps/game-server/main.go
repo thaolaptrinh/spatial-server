@@ -179,8 +179,7 @@ func main() {
 
 	serverID := types.NewServerID()
 
-	roomServiceHost := "room-service"
-	conn, err := grpc.NewClient(fmt.Sprintf("%s:9000", roomServiceHost),
+	conn, err := grpc.NewClient(cfg.RoomService.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -237,8 +236,14 @@ func main() {
 	gameCtx, gameCancel := context.WithCancel(context.Background())
 	g := game.New(serverID, game.WithTickRate(tickRate))
 
-	// Seed NPC for demo (vertical slice)
-	g.AddEntity(entity.New(types.NewEntityID(), "npc", types.NewRuntimeID()))
+	// Seed NPCs from config
+	for _, spec := range cfg.Game.NPCs {
+		npc := entity.New(types.NewEntityID(), spec.Type, types.RuntimeID(""))
+		npc.Position = spec.Position
+		npc.Behavior = spec.Behavior
+		npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(spec)}
+		g.AddEntity(npc)
+	}
 
 	gs := newGameServerServer(g)
 	spatialserverv1.RegisterGameServerServer(srv, gs)
@@ -266,4 +271,15 @@ func main() {
 	heartbeatCancel()
 	srv.GracefulStop()
 	logger.Info("game-server stopped")
+}
+
+func newBehaviorFor(spec config.NPCSpec) game.Behavior {
+	switch spec.Behavior {
+	case "patrol":
+		return &game.PatrolBehavior{Speed: 10, Waypoints: spec.Waypoints}
+	case "wander":
+		return &game.WanderBehavior{Origin: spec.Position, Radius: spec.Radius, Speed: 10}
+	default:
+		return &game.IdleBehavior{BobAmplitude: 0.5, BobFreq: 2}
+	}
 }

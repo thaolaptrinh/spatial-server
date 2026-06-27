@@ -292,6 +292,28 @@ func TestOutbox_DropOnFull(t *testing.T) {
 	g.tick()
 }
 
+func TestDispatch_EntityAction_RoutesToLifecycle(t *testing.T) {
+	g := New(types.ServerID("s1"))
+	e := entity.New(types.EntityID("p1"), "avatar", types.RuntimeID("r1"))
+	e.OwnerID = types.ServerID("p1")
+	rec := &actionRecorder{}
+	e.Lifecycle = rec
+	g.AddEntity(e)
+	b, _ := proto.Marshal(&v1.EntityAction{EntityId: "p1", Action: "jump"})
+	g.dispatch(InboundPacket{
+		ClientID: "p1",
+		Data:     protocol.Encode(protocol.PacketIDEntityAction, b, false, 0),
+	})
+	assert.Equal(t, "jump", rec.lastAction)
+}
+
+type actionRecorder struct {
+	entity.BaseLifecycle
+	lastAction string
+}
+
+func (a *actionRecorder) OnAction(s string, _ []byte) { a.lastAction = s }
+
 func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	e := entity.New(types.EntityID("npc1"), "npc", types.RuntimeID("r1"))

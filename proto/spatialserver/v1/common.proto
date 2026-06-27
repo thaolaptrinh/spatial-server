@@ -82,3 +82,19 @@ message EntityUpdate {
 message Ack {
   bool success = 1;
 }
+
+message EntityAction {
+  string entity_id = 1;
+  string action = 2;
+  bytes payload = 3;
+  int32 sequence = 4;
+  int64 timestamp = 5;
+}
+
+message EntityState {
+  string entity_id = 1;
+  string animation = 2;
+  int32 health = 3;
+  map<string, bytes> attributes = 4;
+  int64 timestamp = 5;
+}
