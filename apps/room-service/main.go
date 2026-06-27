@@ -18,6 +18,7 @@ import (
 
 	"github.com/thaolaptrinh/spatial-server/internal/migration"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
+	"github.com/thaolaptrinh/spatial-server/pkg/api"
 	"github.com/thaolaptrinh/spatial-server/pkg/config"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
 	"github.com/thaolaptrinh/spatial-server/pkg/room"
@@ -127,6 +128,10 @@ func main() {
 		zones:   storage.NewZoneRepository(pgPool),
 	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
+
+	apiSrv := api.NewSpatialServerAPI(api.NewMemoryRuntimeStore(), fmt.Sprintf("gateway:%d", cfg.Gateway.WSPort))
+	spatialserverv1.RegisterSpatialServerAPIServer(srv, apiSrv)
+	healthSrv.SetServingStatus("spatialserver.v1.SpatialServerAPI", grpc_health_v1.HealthCheckResponse_SERVING)
 
 	go func() {
 		logger.Info("room-service starting", slog.Int("port", cfg.GRPC.Port))
