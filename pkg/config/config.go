@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -16,11 +17,15 @@ const (
 )
 
 type Config struct {
-	Service  ServiceConfig  `koanf:"service"`
-	Logging  LoggingConfig  `koanf:"logging"`
-	GRPC     GRPCConfig     `koanf:"grpc"`
-	Postgres PostgresConfig `koanf:"postgres"`
-	Redis    RedisConfig    `koanf:"redis"`
+	Service          ServiceConfig          `koanf:"service"`
+	Logging          LoggingConfig          `koanf:"logging"`
+	GRPC             GRPCConfig             `koanf:"grpc"`
+	Postgres         PostgresConfig         `koanf:"postgres"`
+	Redis            RedisConfig            `koanf:"redis"`
+	Gateway          GatewayConfig          `koanf:"gateway"`
+	RoomService      RoomServiceConfig      `koanf:"room_service"`
+	Game             GameConfig             `koanf:"game"`
+	SpatialServerAPI SpatialServerAPIConfig `koanf:"spatial_api"`
 }
 
 type ServiceConfig struct {
@@ -45,6 +50,31 @@ type PostgresConfig struct {
 
 type RedisConfig struct {
 	Addr string `koanf:"addr"`
+}
+
+type GatewayConfig struct {
+	WSPort        int           `koanf:"ws_port"`
+	JWTSecret     string        `koanf:"jwt_secret"`
+	MaxPacketSize int           `koanf:"max_packet_size"`
+	SoftConnLimit int           `koanf:"soft_conn_limit"`
+	HardConnLimit int           `koanf:"hard_conn_limit"`
+	DrainTimeout  time.Duration `koanf:"drain_timeout"`
+}
+
+type RoomServiceConfig struct {
+	Addr string `koanf:"addr"`
+}
+
+type GameConfig struct {
+	TickRate     time.Duration `koanf:"tick_rate"`
+	MaxEntities  int           `koanf:"max_entities"`
+	ZoneCellSize float64       `koanf:"zone_cell_size"`
+	AOIRadius    float64       `koanf:"aoi_radius"`
+}
+
+type SpatialServerAPIConfig struct {
+	DefaultZoneCount int     `koanf:"default_zone_count"`
+	DefaultZoneSize  float64 `koanf:"default_zone_size"`
 }
 
 func Load(files ...string) (*Config, error) {

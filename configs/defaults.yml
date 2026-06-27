@@ -19,3 +19,12 @@ redis:
 
 gateway:
   jwt_secret: "dev-secret-key-change-in-production"
+  max_packet_size: 65536
+  soft_conn_limit: 9000
+  hard_conn_limit: 10000
+  drain_timeout: 30s
+room_service:
+  addr: "room-service:9000"
+spatial_api:
+  default_zone_count: 1
+  default_zone_size: 100

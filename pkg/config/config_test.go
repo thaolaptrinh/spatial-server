@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,6 +111,34 @@ grpc:
 
 	assert.Equal(t, "base-service", cfg.Service.Name)
 	assert.Equal(t, 8000, cfg.GRPC.Port)
+}
+
+func TestLoad_GatewayAndGameSections(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.yml")
+	require.NoError(t, os.WriteFile(path, []byte(`
+gateway: {ws_port: 8080, jwt_secret: "s", max_packet_size: 65536, drain_timeout: 30s}
+room_service: {addr: "rs:9000"}
+game: {tick_rate: 50ms, max_entities: 5000}
+spatial_api: {default_zone_count: 1, default_zone_size: 100}
+`), 0o644))
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, 8080, cfg.Gateway.WSPort)
+	assert.Equal(t, 30*time.Second, cfg.Gateway.DrainTimeout)
+	assert.Equal(t, "rs:9000", cfg.RoomService.Addr)
+	assert.Equal(t, 5000, cfg.Game.MaxEntities)
+	assert.Equal(t, 1, cfg.SpatialServerAPI.DefaultZoneCount)
+}
+
+func TestLoad_GatewayEnvOverride(t *testing.T) {
+	t.Setenv("SPATIAL_GATEWAY__WS_PORT", "9090")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.yml")
+	require.NoError(t, os.WriteFile(path, []byte("gateway: {ws_port: 8080}\n"), 0o644))
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, 9090, cfg.Gateway.WSPort)
 }
 
 func TestLoad_InvalidYAML(t *testing.T) {
