@@ -193,3 +193,31 @@ func TestRelay_DisconnectRemovesEntity(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	assert.Equal(t, 0, g.EntityCount())
 }
+
+func TestAssignZoneRPC_CreatesZone(t *testing.T) {
+	g := game.New(types.ServerID("gs-1"))
+	srv := newGameServerServer(g)
+
+	resp, err := srv.AssignZone(context.Background(), &spatialserverv1.AssignZoneRequest{
+		ZoneId:    "z1",
+		RuntimeId: "r1",
+		GridX:     0,
+		GridY:     0,
+		ZoneSize:  100,
+	})
+	require.NoError(t, err)
+	require.True(t, resp.GetSuccess())
+	require.NotNil(t, g.AOIFor(types.ZoneID("z1")))
+}
+
+func TestReleaseZoneRPC_TeardownZone(t *testing.T) {
+	g := game.New(types.ServerID("gs-1"))
+	srv := newGameServerServer(g)
+	_, _ = srv.AssignZone(context.Background(), &spatialserverv1.AssignZoneRequest{ZoneId: "z1", RuntimeId: "r1"})
+	require.NotNil(t, g.AOIFor(types.ZoneID("z1")))
+
+	resp, err := srv.ReleaseZone(context.Background(), &spatialserverv1.ReleaseZoneRequest{ZoneId: "z1", RuntimeId: "r1"})
+	require.NoError(t, err)
+	require.True(t, resp.GetSuccess())
+	require.Nil(t, g.AOIFor(types.ZoneID("z1")))
+}

@@ -28,6 +28,7 @@ import (
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
 	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
 	"github.com/thaolaptrinh/spatial-server/pkg/storage"
+	"github.com/thaolaptrinh/spatial-server/pkg/zone"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
@@ -168,6 +169,27 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 			s.game.EnqueueRemoveEntity(types.EntityID(pkt.GetClientId()))
 		}
 	}
+}
+
+func (s *gameServerServer) AssignZone(ctx context.Context, req *spatialserverv1.AssignZoneRequest) (*spatialserverv1.AssignZoneResponse, error) {
+	z := zone.New(
+		types.ZoneID(req.GetZoneId()),
+		types.RuntimeID(req.GetRuntimeId()),
+		int(req.GetGridX()),
+		int(req.GetGridY()),
+		req.GetZoneSize(),
+	)
+	if err := s.game.AssignZone(z); err != nil {
+		return &spatialserverv1.AssignZoneResponse{Success: false}, nil
+	}
+	return &spatialserverv1.AssignZoneResponse{Success: true}, nil
+}
+
+func (s *gameServerServer) ReleaseZone(ctx context.Context, req *spatialserverv1.ReleaseZoneRequest) (*spatialserverv1.ReleaseZoneResponse, error) {
+	if err := s.game.ReleaseZone(types.ZoneID(req.GetZoneId())); err != nil {
+		return &spatialserverv1.ReleaseZoneResponse{Success: false}, nil
+	}
+	return &spatialserverv1.ReleaseZoneResponse{Success: true}, nil
 }
 
 func main() {
