@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
 	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
-	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+	"github.com/thaolaptrinh/spatial-server/internal/game/zone"
 	v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 	"google.golang.org/protobuf/proto"
 )
@@ -109,6 +109,37 @@ func TestReleaseZone_NotFound(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	err := g.ReleaseZone(types.ZoneID("no-such"))
 	assert.Error(t, err)
+}
+
+func TestEntitiesNearGrid_ReturnsEntitiesInMatchingZone(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)))
+
+	near := entity.New(types.EntityID("near"), "avatar", types.RuntimeID("r1"))
+	near.ZoneID = types.ZoneID("z1")
+	near.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(near)
+
+	far := entity.New(types.EntityID("far"), "avatar", types.RuntimeID("r1"))
+	far.ZoneID = types.ZoneID("z1")
+	far.Position = types.Vector3{X: 5000, Z: 5000}
+	g.AddEntity(far)
+
+	got := g.EntitiesNearGrid(0, 0, 200)
+	require.Len(t, got, 1)
+	assert.Equal(t, types.EntityID("near"), got[0].ID)
+}
+
+func TestEntitiesNearGrid_NoMatchingGridReturnsNil(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)))
+
+	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.ZoneID = types.ZoneID("z1")
+	e.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(e)
+
+	assert.Nil(t, g.EntitiesNearGrid(9, 9, 200))
 }
 
 func TestInboxSend(t *testing.T) {

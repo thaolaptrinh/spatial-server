@@ -1,4 +1,4 @@
-package storage
+package room
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/thaolaptrinh/spatial-server/internal/room"
+	"github.com/thaolaptrinh/spatial-server/internal/storage"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/room"
 )
 
 func TestServerRepository_RegisterHeartbeatLeastLoaded(t *testing.T) {
-	pool := testDB(t)
+	pool := storage.TestDB(t)
 	repo := NewServerRepository(pool)
 	ctx := context.Background()
 

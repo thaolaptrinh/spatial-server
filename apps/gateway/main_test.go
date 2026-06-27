@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thaolaptrinh/spatial-server/pkg/gateway"
+	"github.com/thaolaptrinh/spatial-server/internal/gateway"
 )
 
 func TestGatewayWired(t *testing.T) {

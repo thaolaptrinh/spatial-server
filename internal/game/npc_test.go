@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
 )
 
 func TestPatrolBehavior_StepsTowardWaypoint(t *testing.T) {

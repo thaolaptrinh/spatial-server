@@ -2,7 +2,7 @@ package game
 
 import (
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
 	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
 	v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 	"google.golang.org/protobuf/proto"

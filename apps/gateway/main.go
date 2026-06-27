@@ -16,10 +16,10 @@ import (
 
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 
-	"github.com/thaolaptrinh/spatial-server/pkg/config"
-	"github.com/thaolaptrinh/spatial-server/pkg/gateway"
-	"github.com/thaolaptrinh/spatial-server/pkg/logging"
-	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
+	"github.com/thaolaptrinh/spatial-server/internal/config"
+	"github.com/thaolaptrinh/spatial-server/internal/gateway"
+	"github.com/thaolaptrinh/spatial-server/internal/logging"
+	"github.com/thaolaptrinh/spatial-server/internal/metrics"
 )
 
 type roomLookuper struct {

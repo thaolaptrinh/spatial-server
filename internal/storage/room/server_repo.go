@@ -1,4 +1,4 @@
-package storage
+package room
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/room"
+	"github.com/thaolaptrinh/spatial-server/internal/room"
 )
 
 type ServerRepository struct{ pool *pgxpool.Pool }

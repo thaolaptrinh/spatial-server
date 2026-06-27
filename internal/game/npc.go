@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
 )
 
 type Behavior interface {

@@ -21,14 +21,15 @@ import (
 
 	"github.com/thaolaptrinh/spatial-server/internal/migration"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/config"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
-	"github.com/thaolaptrinh/spatial-server/pkg/game"
-	grpcinterceptor "github.com/thaolaptrinh/spatial-server/pkg/grpc"
-	"github.com/thaolaptrinh/spatial-server/pkg/logging"
-	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
-	"github.com/thaolaptrinh/spatial-server/pkg/storage"
-	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+	"github.com/thaolaptrinh/spatial-server/internal/config"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game"
+	grpcinterceptor "github.com/thaolaptrinh/spatial-server/internal/grpc"
+	"github.com/thaolaptrinh/spatial-server/internal/logging"
+	"github.com/thaolaptrinh/spatial-server/internal/metrics"
+	"github.com/thaolaptrinh/spatial-server/internal/storage"
+	storagegame "github.com/thaolaptrinh/spatial-server/internal/storage/game"
+	"github.com/thaolaptrinh/spatial-server/internal/game/zone"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
@@ -282,12 +283,12 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	if err := migration.Run(pgPool, "pkg/storage/migrations"); err != nil {
+	if err := migration.Run(pgPool, "internal/storage/migrations"); err != nil {
 		logger.Error("run migrations failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	snapRepo := storage.NewSnapshotStore(pgPool)
+	snapRepo := storagegame.NewSnapshotStore(pgPool)
 	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, cfg.Game.SnapshotInterval))
 
 	// Crash recovery: restore from latest snapshot
@@ -335,7 +336,7 @@ func main() {
 }
 
 type snapshotAdapter struct {
-	repo    *storage.SnapshotStore
+	repo    *storagegame.SnapshotStore
 	runtime string
 }
 

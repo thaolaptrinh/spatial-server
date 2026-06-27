@@ -15,8 +15,8 @@ import (
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/auth"
-	"github.com/thaolaptrinh/spatial-server/pkg/session"
+	"github.com/thaolaptrinh/spatial-server/internal/auth"
+	"github.com/thaolaptrinh/spatial-server/internal/session"
 )
 
 type ZoneLookuper interface {

@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/game"
+	"github.com/thaolaptrinh/spatial-server/internal/game"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 

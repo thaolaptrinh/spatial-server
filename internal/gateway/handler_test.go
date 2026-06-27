@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/session"
+	"github.com/thaolaptrinh/spatial-server/internal/session"
 )
 
 type fakeLookuper struct {

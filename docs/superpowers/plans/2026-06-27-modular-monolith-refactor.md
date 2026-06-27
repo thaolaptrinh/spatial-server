@@ -122,12 +122,11 @@ rmdir pkg/room pkg/api
 - Move: `pkg/zone/` → `internal/game/zone/`
 - Delete: `pkg/game/peer.go`
 
-- [ ] **Step 1:** Move game files:
+- [ ] **Step 1:** Move game files (NOTE: no encode_test.go exists):
 ```bash
 git mv pkg/game/game.go internal/game/simulation.go
 git mv pkg/game/game_test.go internal/game/simulation_test.go
 git mv pkg/game/encode.go internal/game/codec.go
-git mv pkg/game/encode_test.go internal/game/codec_test.go
 git mv pkg/game/npc.go internal/game/npc.go
 git mv pkg/game/npc_test.go internal/game/npc_test.go
 ```
@@ -137,12 +136,10 @@ git mv pkg/game/npc_test.go internal/game/npc_test.go
 git rm pkg/game/peer.go
 ```
 
-- [ ] **Step 3:** Move entity, aoi, zone (whole directories):
+- [ ] **Step 3:** Move entity, aoi, zone (NOTE: no id.go/id_test.go in pkg/entity/):
 ```bash
 git mv pkg/entity/entity.go internal/game/entity/entity.go
 git mv pkg/entity/entity_test.go internal/game/entity/entity_test.go
-git mv pkg/entity/id.go internal/game/entity/id.go
-git mv pkg/entity/id_test.go internal/game/entity/id_test.go
 
 git mv pkg/aoi/aoi.go internal/game/aoi/aoi.go
 git mv pkg/aoi/aoi_test.go internal/game/aoi/aoi_test.go
@@ -170,6 +167,7 @@ rmdir pkg/game pkg/entity pkg/aoi pkg/zone
 - [ ] **Step 1:** Move storage files (split by domain):
 ```bash
 git mv pkg/storage/storage.go internal/storage/pools.go
+git mv pkg/storage/storage_test.go internal/storage/pools_test.go
 git mv pkg/storage/testdb_test.go internal/storage/testdb_test.go
 git mv pkg/storage/migrations internal/storage/migrations
 
@@ -252,26 +250,7 @@ The module path is `github.com/thaolaptrinh/spatial-server`.
 
 **Unchanged:** `pkg/protocol`, `internal/types`, `internal/migration`
 
-- [ ] **Step 1:** Bulk-update all Go files using sed (ordered by specificity):
-```bash
-find . -name '*.go' -not -path './vendor/*' | xargs sed -i \
-  -e 's|/pkg/entity|/internal/game/entity|g' \
-  -e 's|/pkg/aoi|/internal/game/aoi|g' \
-  -e 's|/pkg/zone|/internal/game/zone|g' \
-  -e 's|/pkg/gateway|/internal/gateway|g' \
-  -e 's|/pkg/session|/internal/session|g' \
-  -e 's|/pkg/auth|/internal/auth|g' \
-  -e 's|/pkg/room|/internal/room|g' \
-  -e 's|/pkg/api|/internal/room|g' \
-  -e 's|/pkg/game|/internal/game|g' \
-  -e 's|/pkg/storage|/internal/storage|g' \
-  -e 's|/pkg/grpc|/internal/grpc|g' \
-  -e 's|/pkg/config|/internal/config|g' \
-  -e 's|/pkg/logging|/internal/logging|g' \
-  -e 's|/pkg/metrics|/internal/metrics|g'
-```
-
-- [ ] **Step 2:** Also update bare references in Go files (comments, string literals):
+- [ ] **Step 1:** Bulk-update all Go files using sed (bare `pkg/X` pattern catches both `/pkg/X` and standalone):
 ```bash
 find . -name '*.go' -not -path './vendor/*' | xargs sed -i \
   -e 's|pkg/entity|internal/game/entity|g' \
@@ -290,34 +269,13 @@ find . -name '*.go' -not -path './vendor/*' | xargs sed -i \
   -e 's|pkg/metrics|internal/metrics|g'
 ```
 
-Note: Step 1 and Step 2 can be combined since `/pkg/entity` contains `pkg/entity`, and the first sed will have already replaced it. However, running both ensures bare references without a leading `/` are also caught. Since Step 1 replaces `/pkg/entity` which includes the `pkg/entity` substring, Step 2 is redundant after Step 1 — EXCEPT for cases where `pkg/entity` appears without a leading `/` (e.g., at the start of a line in comments). **Use only Step 2** (bare `pkg/entity` pattern) as it catches both `/pkg/entity` and standalone `pkg/entity`.
-
-**CORRECTED — use this single command:**
-```bash
-find . -name '*.go' -not -path './vendor/*' | xargs sed -i \
-  -e 's|pkg/entity|internal/game/entity|g' \
-  -e 's|pkg/aoi|internal/game/aoi|g' \
-  -e 's|pkg/zone|internal/game/zone|g' \
-  -e 's|pkg/gateway|internal/gateway|g' \
-  -e 's|pkg/session|internal/session|g' \
-  -e 's|pkg/auth|internal/auth|g' \
-  -e 's|pkg/room|internal/room|g' \
-  -e 's|pkg/api|internal/room|g' \
-  -e 's|pkg/game|internal/game|g' \
-  -e 's|pkg/storage|internal/storage|g' \
-  -e 's|pkg/grpc|internal/grpc|g' \
-  -e 's|pkg/config|internal/config|g' \
-  -e 's|pkg/logging|internal/logging|g' \
-  -e 's|pkg/metrics|internal/metrics|g'
-```
-
-- [ ] **Step 3:** Verify no stale references remain:
+- [ ] **Step 2:** Verify no stale references remain:
 ```bash
 # Should find ZERO matches (pkg/protocol is the only allowed pkg/ reference)
 grep -rn 'pkg/\(gateway\|auth\|session\|room\|api\|game\|entity\|aoi\|zone\|storage\|grpc\|config\|logging\|metrics\)' --include='*.go' .
 ```
 
-- [ ] **Step 4:** Attempt build to catch remaining issues:
+- [ ] **Step 3:** Attempt build to catch remaining issues:
 ```bash
 go build ./... 2>&1 | head -40
 ```

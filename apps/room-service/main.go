@@ -19,13 +19,13 @@ import (
 
 	"github.com/thaolaptrinh/spatial-server/internal/migration"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/api"
-	"github.com/thaolaptrinh/spatial-server/pkg/config"
-	grpcinterceptor "github.com/thaolaptrinh/spatial-server/pkg/grpc"
-	"github.com/thaolaptrinh/spatial-server/pkg/logging"
-	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
-	"github.com/thaolaptrinh/spatial-server/pkg/room"
-	"github.com/thaolaptrinh/spatial-server/pkg/storage"
+	"github.com/thaolaptrinh/spatial-server/internal/room"
+	"github.com/thaolaptrinh/spatial-server/internal/config"
+	grpcinterceptor "github.com/thaolaptrinh/spatial-server/internal/grpc"
+	"github.com/thaolaptrinh/spatial-server/internal/logging"
+	"github.com/thaolaptrinh/spatial-server/internal/metrics"
+	"github.com/thaolaptrinh/spatial-server/internal/storage"
+	storageroom "github.com/thaolaptrinh/spatial-server/internal/storage/room"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
@@ -107,7 +107,7 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	if err := migration.Run(pgPool, "pkg/storage/migrations"); err != nil {
+	if err := migration.Run(pgPool, "internal/storage/migrations"); err != nil {
 		logger.Error("migration failed", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
@@ -139,12 +139,12 @@ func main() {
 	reflection.Register(srv)
 
 	service := &roomServiceServer{
-		servers: storage.NewServerRepository(pgPool),
-		zones:   storage.NewZoneRepository(pgPool),
+		servers: storageroom.NewServerRepository(pgPool),
+		zones:   storageroom.NewZoneRepository(pgPool),
 	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
 
-	apiSrv := api.NewSpatialServerAPI(api.NewMemoryRuntimeStore(), fmt.Sprintf("gateway:%d", cfg.Gateway.WSPort))
+	apiSrv := room.NewSpatialServerAPI(room.NewMemoryRuntimeStore(), fmt.Sprintf("gateway:%d", cfg.Gateway.WSPort))
 	spatialserverv1.RegisterSpatialServerAPIServer(srv, apiSrv)
 	healthSrv.SetServingStatus("spatialserver.v1.SpatialServerAPI", grpc_health_v1.HealthCheckResponse_SERVING)
 

@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
+	"github.com/thaolaptrinh/spatial-server/internal/metrics"
 )
 
 func RecoveryInterceptor(_ *metrics.Registry) grpc.UnaryServerInterceptor {

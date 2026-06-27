@@ -1,4 +1,4 @@
-package storage
+package game
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/thaolaptrinh/spatial-server/internal/storage"
 )
 
 func TestSnapshotStore_SaveAndLoad(t *testing.T) {
-	pool := testDB(t)
+	pool := storage.TestDB(t)
 	store := NewSnapshotStore(pool)
 	ctx := context.Background()
 

@@ -1,4 +1,4 @@
-package storage
+package room
 
 import (
 	"context"
@@ -7,11 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/thaolaptrinh/spatial-server/internal/storage"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 )
 
 func TestZoneRepository_ClaimLookupRelease(t *testing.T) {
-	pool := testDB(t)
+	pool := storage.TestDB(t)
 	repo := NewZoneRepository(pool)
 	ctx := context.Background()
 

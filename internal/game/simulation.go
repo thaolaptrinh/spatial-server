@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
-	"github.com/thaolaptrinh/spatial-server/pkg/aoi"
-	"github.com/thaolaptrinh/spatial-server/pkg/entity"
+	"github.com/thaolaptrinh/spatial-server/internal/game/aoi"
+	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
 	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
-	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+	"github.com/thaolaptrinh/spatial-server/internal/game/zone"
 	v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 	"google.golang.org/protobuf/proto"
 )
@@ -63,7 +63,6 @@ type Game struct {
 	ServerID      types.ServerID
 	Zones         map[types.ZoneID]*zoneSim
 	Entities      map[types.EntityID]*entity.Entity
-	Peers         *PeerRegistry
 	entityZone    map[types.EntityID]types.ZoneID
 	entityAOI     map[types.EntityID]*entityAOIState
 	ghosts        map[types.EntityID]*ghostEntry
@@ -94,7 +93,6 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		ServerID:   sid,
 		Zones:      make(map[types.ZoneID]*zoneSim),
 		Entities:   make(map[types.EntityID]*entity.Entity),
-		Peers:      NewPeerRegistry(),
 		entityZone: make(map[types.EntityID]types.ZoneID),
 		entityAOI:  make(map[types.EntityID]*entityAOIState),
 		ghosts:     make(map[types.EntityID]*ghostEntry),
