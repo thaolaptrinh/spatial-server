@@ -7,15 +7,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/env"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -23,6 +18,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
+	"github.com/thaolaptrinh/spatial-server/pkg/config"
 	"github.com/thaolaptrinh/spatial-server/pkg/entity"
 	"github.com/thaolaptrinh/spatial-server/pkg/game"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
@@ -169,28 +165,17 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 }
 
 func main() {
-	k := koanf.New(".")
-	if err := k.Load(file.Provider("configs/defaults.yml"), yaml.Parser()); err != nil {
-		fmt.Fprintf(os.Stderr, "load defaults: %v\n", err)
-		os.Exit(1)
-	}
-	if err := k.Load(file.Provider("configs/game-server.yml"), yaml.Parser()); err != nil {
+	cfg, err := config.Load("configs/defaults.yml", "configs/game-server.yml")
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		os.Exit(1)
 	}
-	if err := k.Load(env.Provider("SPATIAL_", ".", func(s string) string {
-		return strings.Replace(strings.ToLower(strings.TrimPrefix(s, "SPATIAL_")), "__", ".", -1)
-	}), nil); err != nil {
-		fmt.Fprintf(os.Stderr, "load env: %v\n", err)
-		os.Exit(1)
-	}
 
-	logger := logging.NewDefault(k.String("service.name"))
+	logger := logging.NewDefault(cfg.Service.Name)
 
-	gRPCPort := k.Int("grpc.port")
-	host := k.String("grpc.host")
-	tickRateStr := k.String("game.tick_rate")
-	tickRate, _ := time.ParseDuration(tickRateStr)
+	gRPCPort := cfg.GRPC.Port
+	host := cfg.GRPC.Host
+	tickRate := cfg.Game.TickRate
 
 	serverID := types.NewServerID()
 
@@ -259,7 +244,7 @@ func main() {
 	spatialserverv1.RegisterGameServerServer(srv, gs)
 
 	go func() {
-		logger.Info("game loop starting", slog.String("tick", tickRateStr))
+		logger.Info("game loop starting", slog.String("tick", tickRate.String()))
 		if err := g.Run(gameCtx); err != nil && err != context.Canceled {
 			logger.Error("game loop exited", slog.String("error", err.Error()))
 		}
