@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -17,11 +18,12 @@ import (
 )
 
 const (
-	DefaultTickRate   = 50 * time.Millisecond
-	InboxBufferSize   = 4096
-	DefaultCellSize   = 100.0
-	DefaultAOIRadius  = 300.0
-	cmdChannelBuffer  = 256
+	DefaultTickRate  = 50 * time.Millisecond
+	InboxBufferSize  = 4096
+	DefaultCellSize  = 100.0
+	DefaultAOIRadius = 300.0
+	cmdChannelBuffer = 256
+	DefaultZoneID    = types.ZoneID("default")
 )
 
 type InboundPacket struct {
@@ -41,9 +43,16 @@ type entityAOIState struct {
 
 type ghostEntry struct {
 	entityID  types.EntityID
+	zoneID    types.ZoneID
 	position  types.Vector3
 	createdAt time.Time
 	expiresAt time.Time
+}
+
+type zoneSim struct {
+	zone     *zone.Zone
+	aoi      *aoi.AOI
+	entities map[types.EntityID]*entity.Entity
 }
 
 type SnapshotWriter interface {
@@ -52,18 +61,19 @@ type SnapshotWriter interface {
 
 type Game struct {
 	ServerID      types.ServerID
+	Zones         map[types.ZoneID]*zoneSim
 	Entities      map[types.EntityID]*entity.Entity
-	Zones         map[types.ZoneID]*zone.Zone
-	Inbox         chan InboundPacket
-	Outbox        chan OutboundPacket
-	aoi           *aoi.AOI
-	aoiRadius     float64
-	tickRate      time.Duration
+	Peers         *PeerRegistry
+	entityZone    map[types.EntityID]types.ZoneID
 	entityAOI     map[types.EntityID]*entityAOIState
 	ghosts        map[types.EntityID]*ghostEntry
+	Inbox         chan InboundPacket
+	Outbox        chan OutboundPacket
+	aoiRadius     float64
+	tickRate      time.Duration
 	ghostTTL      time.Duration
 	cmds          chan func()
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	snapshotter   SnapshotWriter
 	snapshotEvery int
 	tickCount     int64
@@ -81,18 +91,19 @@ func WithSnapshotter(w SnapshotWriter, every int) Option {
 
 func New(sid types.ServerID, opts ...Option) *Game {
 	g := &Game{
-		ServerID:  sid,
-		Entities:  make(map[types.EntityID]*entity.Entity),
-		Zones:     make(map[types.ZoneID]*zone.Zone),
-		Inbox:     make(chan InboundPacket, InboxBufferSize),
-		Outbox:    make(chan OutboundPacket, InboxBufferSize),
-		aoi:       aoi.New(DefaultCellSize, DefaultAOIRadius),
-		aoiRadius: DefaultAOIRadius,
-		tickRate:  DefaultTickRate,
-		entityAOI: make(map[types.EntityID]*entityAOIState),
-		ghosts:    make(map[types.EntityID]*ghostEntry),
-		ghostTTL:  5 * time.Second,
-		cmds:     make(chan func(), cmdChannelBuffer),
+		ServerID:   sid,
+		Zones:      make(map[types.ZoneID]*zoneSim),
+		Entities:   make(map[types.EntityID]*entity.Entity),
+		Peers:      NewPeerRegistry(),
+		entityZone: make(map[types.EntityID]types.ZoneID),
+		entityAOI:  make(map[types.EntityID]*entityAOIState),
+		ghosts:     make(map[types.EntityID]*ghostEntry),
+		Inbox:      make(chan InboundPacket, InboxBufferSize),
+		Outbox:     make(chan OutboundPacket, InboxBufferSize),
+		aoiRadius:  DefaultAOIRadius,
+		tickRate:   DefaultTickRate,
+		ghostTTL:   5 * time.Second,
+		cmds:       make(chan func(), cmdChannelBuffer),
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -100,44 +111,138 @@ func New(sid types.ServerID, opts ...Option) *Game {
 	return g
 }
 
+func (g *Game) AssignZone(z *zone.Zone) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, exists := g.Zones[z.ID]; exists {
+		return fmt.Errorf("zone %s: %w", z.ID, types.ErrConflict)
+	}
+	g.Zones[z.ID] = &zoneSim{
+		zone:     z,
+		aoi:      aoi.New(DefaultCellSize, g.aoiRadius),
+		entities: make(map[types.EntityID]*entity.Entity),
+	}
+	return nil
+}
+
+func (g *Game) ReleaseZone(id types.ZoneID) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	sim, exists := g.Zones[id]
+	if !exists {
+		return fmt.Errorf("zone %s: %w", id, types.ErrNotFound)
+	}
+	for eid, zid := range g.entityZone {
+		if zid != id {
+			continue
+		}
+		delete(g.Entities, eid)
+		delete(g.entityAOI, eid)
+		delete(g.entityZone, eid)
+	}
+	for gid, ghost := range g.ghosts {
+		if ghost.zoneID == id {
+			delete(g.ghosts, gid)
+		}
+	}
+	delete(g.Zones, id)
+	_ = sim
+	return nil
+}
+
+func (g *Game) AOIFor(zid types.ZoneID) *aoi.AOI {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if sim := g.Zones[zid]; sim != nil {
+		return sim.aoi
+	}
+	return nil
+}
+
+func (g *Game) ZoneOf(id types.EntityID) types.ZoneID {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.entityZone[id]
+}
+
 func (g *Game) addEntity(e *entity.Entity) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
+	zid := e.ZoneID
+	if zid == "" {
+		zid = DefaultZoneID
+		e.ZoneID = zid
+	}
+	sim := g.Zones[zid]
+	if sim == nil {
+		sim = &zoneSim{
+			aoi:      aoi.New(DefaultCellSize, g.aoiRadius),
+			entities: make(map[types.EntityID]*entity.Entity),
+		}
+		g.Zones[zid] = sim
+	}
 	g.Entities[e.ID] = e
-	g.aoi.Enter(e.ID, e.Position)
+	g.entityZone[e.ID] = zid
+	sim.entities[e.ID] = e
+	sim.aoi.Enter(e.ID, e.Position)
 	g.entityAOI[e.ID] = &entityAOIState{
 		visible:      make(map[types.EntityID]struct{}),
 		lastPosition: e.Position,
 	}
-	g.mu.Unlock()
 }
 
-func (g *Game) AddEntity(e *entity.Entity) {
-	g.addEntity(e)
-}
+func (g *Game) AddEntity(e *entity.Entity) { g.addEntity(e) }
 
 func (g *Game) removeEntity(id types.EntityID) {
 	g.mu.Lock()
-	g.aoi.Leave(id)
+	defer g.mu.Unlock()
+	zid, ok := g.entityZone[id]
+	if !ok {
+		return
+	}
+	if sim := g.Zones[zid]; sim != nil {
+		sim.aoi.Leave(id)
+		delete(sim.entities, id)
+	}
 	delete(g.Entities, id)
-	g.mu.Unlock()
+	delete(g.entityAOI, id)
+	delete(g.entityZone, id)
 }
 
-func (g *Game) RemoveEntity(id types.EntityID) {
-	g.removeEntity(id)
-}
+func (g *Game) RemoveEntity(id types.EntityID) { g.removeEntity(id) }
 
 func (g *Game) EntityCount() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return len(g.Entities)
 }
 
-func (g *Game) AssignZone(z *zone.Zone) {
-	g.Zones[z.ID] = z
-}
-
-func (g *Game) ReleaseZone(id types.ZoneID) {
-	delete(g.Zones, id)
+func (g *Game) EntitiesNearGrid(gridX, gridY int, radius float64) []*entity.Entity {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	var result []*entity.Entity
+	radiusSq := radius * radius
+	for _, sim := range g.Zones {
+		if sim.zone == nil || sim.zone.Grid.X != gridX || sim.zone.Grid.Y != gridY {
+			continue
+		}
+		size := sim.zone.Size
+		if size <= 0 {
+			size = DefaultCellSize
+		}
+		center := types.Vector3{
+			X: float64(gridX)*size + size/2,
+			Z: float64(gridY)*size + size/2,
+		}
+		for _, e := range sim.entities {
+			dx := e.Position.X - center.X
+			dz := e.Position.Z - center.Z
+			if dx*dx+dz*dz <= radiusSq {
+				result = append(result, e)
+			}
+		}
+	}
+	return result
 }
 
 func (g *Game) Run(ctx context.Context) error {
@@ -190,23 +295,36 @@ func (g *Game) tick() {
 				g.snapshotAllZones()
 			}
 			g.simulate(g.tickRate)
-			g.detectZoneBoundaries()
-			g.updateVisibility()
+			zids := g.zoneIDs()
+			for _, zid := range zids {
+				g.detectZoneBoundaries(zid)
+				g.updateVisibility(zid)
+			}
 			g.sweepGhosts()
 			return
 		}
 	}
 }
 
+func (g *Game) zoneIDs() []types.ZoneID {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	zids := make([]types.ZoneID, 0, len(g.Zones))
+	for zid := range g.Zones {
+		zids = append(zids, zid)
+	}
+	return zids
+}
+
 func (g *Game) snapshotAllZones() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for zid := range g.Zones {
+	if g.snapshotter == nil {
+		return
+	}
+	for zid, sim := range g.Zones {
 		var rows []map[string]any
-		for _, e := range g.Entities {
-			if e.ZoneID != zid {
-				continue
-			}
+		for _, e := range sim.entities {
 			rows = append(rows, map[string]any{
 				"id":       string(e.ID),
 				"type":     e.Type,
@@ -225,28 +343,32 @@ func (g *Game) snapshotAllZones() {
 	}
 }
 
-func (g *Game) detectZoneBoundaries() {
+func (g *Game) detectZoneBoundaries(zid types.ZoneID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for id := range g.Entities {
-		e := g.Entities[id]
+	sim := g.Zones[zid]
+	if sim == nil {
+		return
+	}
+	for id, e := range sim.entities {
 		state, exists := g.entityAOI[id]
 		if !exists {
 			continue
 		}
-		oldCellX, oldCellY := g.aoi.CellCoord(state.lastPosition)
-		currentCellX, currentCellY := g.aoi.CellCoord(e.Position)
+		oldCellX, oldCellY := sim.aoi.CellCoord(state.lastPosition)
+		currentCellX, currentCellY := sim.aoi.CellCoord(e.Position)
 		if oldCellX == currentCellX && oldCellY == currentCellY {
 			continue
 		}
 		ghostID := types.EntityID(string(id) + "_ghost")
 		g.ghosts[ghostID] = &ghostEntry{
 			entityID:  id,
+			zoneID:    zid,
 			position:  state.lastPosition,
 			createdAt: time.Now(),
 			expiresAt: time.Now().Add(g.ghostTTL),
 		}
-		g.aoi.Enter(ghostID, state.lastPosition)
+		sim.aoi.Enter(ghostID, state.lastPosition)
 	}
 }
 
@@ -255,25 +377,31 @@ func (g *Game) sweepGhosts() {
 	defer g.mu.Unlock()
 	now := time.Now()
 	for id, ghost := range g.ghosts {
-		if now.After(ghost.expiresAt) {
-			g.aoi.Leave(id)
-			delete(g.ghosts, id)
+		if !now.After(ghost.expiresAt) {
+			continue
 		}
+		if sim := g.Zones[ghost.zoneID]; sim != nil {
+			sim.aoi.Leave(id)
+		}
+		delete(g.ghosts, id)
 	}
 }
 
 func (g *Game) GhostCount() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return len(g.ghosts)
 }
 
-func (g *Game) updateVisibility() {
-	if g.entityAOI == nil {
+func (g *Game) updateVisibility(zid types.ZoneID) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	sim := g.Zones[zid]
+	if sim == nil {
 		return
 	}
-	for _, e := range g.Entities {
-		current := g.aoi.EntitiesInRange(e.Position, g.aoiRadius)
+	for _, e := range sim.entities {
+		current := sim.aoi.EntitiesInRange(e.Position, g.aoiRadius)
 		currentSet := make(map[types.EntityID]struct{}, len(current))
 		for _, id := range current {
 			currentSet[id] = struct{}{}
@@ -325,6 +453,8 @@ func (g *Game) dispatch(pkt InboundPacket) {
 	if err != nil {
 		return
 	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if id == protocol.PacketIDPositionUpdate {
 		var upd v1.EntityUpdate
 		if err := proto.Unmarshal(payload, &upd); err != nil {
@@ -337,7 +467,11 @@ func (g *Game) dispatch(pkt InboundPacket) {
 		e.Position.X = upd.GetPosition().GetX()
 		e.Position.Y = upd.GetPosition().GetY()
 		e.Position.Z = upd.GetPosition().GetZ()
-		g.aoi.Move(e.ID, e.Position)
+		if zid, ok := g.entityZone[e.ID]; ok {
+			if sim := g.Zones[zid]; sim != nil {
+				sim.aoi.Move(e.ID, e.Position)
+			}
+		}
 	}
 	if id == protocol.PacketIDEntityAction {
 		var act v1.EntityAction
@@ -364,8 +498,16 @@ func (g *Game) dispatch(pkt InboundPacket) {
 		if !ok {
 			return
 		}
+		zid, ok := g.entityZone[e.ID]
+		if !ok {
+			return
+		}
+		sim := g.Zones[zid]
+		if sim == nil {
+			return
+		}
 		frame := encodeStateFrame(e.ID, st.GetAnimation(), st.GetHealth())
-		for _, obsID := range g.aoi.EntitiesInRange(e.Position, g.aoiRadius) {
+		for _, obsID := range sim.aoi.EntitiesInRange(e.Position, g.aoiRadius) {
 			if obsID == e.ID {
 				continue
 			}
@@ -385,18 +527,28 @@ func (g *Game) simulate(dt time.Duration) {
 		if !ok || lc == nil || lc.Behavior == nil {
 			continue
 		}
-		before := e.Position
 		if lc.Behavior.Step(e, dt) {
-			g.aoi.Move(id, e.Position)
+			if zid, ok := g.entityZone[id]; ok {
+				if sim := g.Zones[zid]; sim != nil {
+					sim.aoi.Move(id, e.Position)
+				}
+			}
 			g.enqueueMove(id, e.Position)
 		}
-		_ = before
 	}
 }
 
 func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {
+	zid, ok := g.entityZone[id]
+	if !ok {
+		return
+	}
+	sim := g.Zones[zid]
+	if sim == nil {
+		return
+	}
 	frame := encodeMoveFrame(id, pos)
-	for _, obsID := range g.aoi.EntitiesInRange(pos, g.aoiRadius) {
+	for _, obsID := range sim.aoi.EntitiesInRange(pos, g.aoiRadius) {
 		if obsID == id {
 			continue
 		}
@@ -406,5 +558,3 @@ func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {
 		}
 	}
 }
-
-
