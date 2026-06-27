@@ -103,7 +103,7 @@ packages: [docker.io, fail2ban, curl, jq]
 runcmd: [sysctl -w fs.file-max=2097152, 'printf "spatial soft/hard nofile 1048576\n">/etc/security/limits.d/99-spatial.conf', systemctl enable --now docker fail2ban]
 # === cloud-init/k3s-server.yaml === (merged with common)
 #cloud-config
-write_files: [{ path: /etc/rancher/k3s/config.yaml, content: "tls-san: [${server_private_ip}]\ndisable: [traefik]" }]
+write_files: [{ path: /etc/rancher/k3s/config.yaml, content: "tls-san: [${server_private_ip}]" }]
 runcmd: ['curl -sfL https://get.k3s.io|INSTALL_K3S_EXEC="server --cluster-init" sh -', chmod 644 /etc/rancher/k3s/k3s.yaml, 'echo K3S_TOKEN=$(cat /var/lib/rancher/k3s/server/node-token)>/home/spatial/.k3s-join.env']
 # === cloud-init/k3s-agent.yaml === (merged with common)
 #cloud-config

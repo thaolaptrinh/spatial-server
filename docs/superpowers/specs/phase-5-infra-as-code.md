@@ -1,6 +1,7 @@
 # Phase 5 — Infra-as-Code
 
 > **Last Updated:** 2026-06-27
+> **Note:** The `k3s/ingress.yaml` manifest uses `kubernetes.io/ingress.class: traefik`. K3s bundles Traefik by default — do NOT disable it in cloud-init. If an alternative ingress controller is preferred (e.g., nginx-ingress), disable Traefik via `disable: [traefik]` in cloud-init AND update ingressClassName accordingly.
 > **Status:** Draft
 
 ## Purpose

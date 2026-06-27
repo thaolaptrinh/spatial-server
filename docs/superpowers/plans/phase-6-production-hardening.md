@@ -301,13 +301,48 @@ func (h *Histogram) Percentile(p float64) float64 {
 	if len(d) == 0 { return 0 }; sort.Float64s(d)
 	idx := int(math.Ceil((p/100)*float64(len(d)))) - 1; if idx < 0 { idx = 0 }; return d[idx]
 }
-// === client.go ===: Virtual WebSocket client — connects, sends timestamped position packets, captures round-trip latency.
-// type Client struct { conn *websocket.Conn; latencies *Histogram; playerID string }
-// func NewClient(addr, token string, latencies *Histogram) (*Client, error)
-// func (c *Client) Run(ctx context.Context) — receives echo packets, records latency.
-// === report.go ===: type Report struct{ Scenario, Start, End string; P50,P95,P99,P999 float64; Pass bool }
-// func NewReport(scenario string) *Report; func (r *Report) Write() error — writes to benchmarks/reports/<scenario>-<ts>.json
-// func (r *Report) PrintSummary()
+// === client.go ===
+package framework
+import ("context"; "fmt"; "log"; "time"; "github.com/coder/websocket"; "github.com/thaolaptrinh/spatial-server/pkg/protocol"; v1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"; "google.golang.org/protobuf/proto")
+type Client struct { conn *websocket.Conn; latencies *Histogram; PlayerID string }
+func NewClient(ctx context.Context, addr, token string, latencies *Histogram) (*Client, error) {
+	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("ws://%s/ws?token=%s", addr, token), nil)
+	if err != nil { return nil, fmt.Errorf("dial: %w", err) }
+	return &Client{conn: conn, latencies: latencies, PlayerID: "bench"}, nil
+}
+func (c *Client) Run(ctx context.Context) error {
+	go func() {
+		t := time.NewTicker(time.Second); defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done(): return
+			case <-t.C:
+				payload, _ := proto.Marshal(&v1.EntityUpdate{EntityId: c.PlayerID, Position: &v1.Vector3{X: 100, Y: 0, Z: 100}, Timestamp: time.Now().UnixMilli()})
+				c.conn.Write(ctx, websocket.MessageBinary, protocol.Encode(protocol.PacketIDPositionUpdate, payload, false))
+		}}}()
+
+	for {
+		_, msg, err := c.conn.Read(ctx)
+		if err != nil { return fmt.Errorf("read: %w", err) }
+		t0 := time.Now()
+		_, payload, _, err := protocol.Decode(msg)
+		if err != nil { continue }
+		switch {
+		case len(payload) >= 4 && payload[0] == 0x06:
+			var upd v1.EntityUpdate; proto.Unmarshal(payload, &upd)
+			c.latencies.Observe(float64(time.Since(t0).Microseconds()))
+		}
+	}
+}
+// === report.go ===
+type Report struct { Scenario, Start, End string; P50, P95, P99, P999 float64; Packets int; Pass bool }
+func NewReport(scenario string) *Report { return &Report{Scenario: scenario, Start: time.Now().Format(time.RFC3339)} }
+func (r *Report) Write() error {
+	r.End = time.Now().Format(time.RFC3339)
+	data, _ := json.MarshalIndent(r, "", "  "); return os.WriteFile(fmt.Sprintf("benchmarks/reports/%s-%s.json", r.Scenario, time.Now().Format("20060102T150405")), data, 0644)
+}
+// (imports: "encoding/json", "os")
+func (r *Report) PrintSummary() { fmt.Printf("\n=== %s ===\nP50: %.0fµs  P95: %.0fµs  P99: %.0fµs  Packets: %d  Pass: %t\n", r.Scenario, r.P50, r.P95, r.P99, r.Packets, r.Pass) }
 ```
 
 - [ ] **Step 4: Verify pass** — `go test ./benchmarks/framework/... -race -v` → PASS.

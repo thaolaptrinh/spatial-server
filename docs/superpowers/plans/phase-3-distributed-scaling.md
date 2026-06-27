@@ -2033,7 +2033,77 @@
 
 ---
 
-## Self-Review Checklist
+### Task 11: Config files for distributed mode + integration tests
+
+**Files:** Modify `deploy/docker-compose/docker-compose.yml`, `configs/game-server.yml`, `configs/room-service.yml`, `configs/gateway.yml`. Create `test/integration/migration_test.go`.
+
+- [ ] **Step 1: Update docker-compose for multi-replica**
+
+```yaml
+# In deploy/docker-compose/docker-compose.yml, modify game-server:
+  game-server:
+    build:
+      context: ../..
+      dockerfile: build/docker/game-server.Dockerfile
+    depends_on:
+      - room-service
+    environment:
+      SPATIAL_GRPC__HOST: "game-server"
+      SPATIAL_GRPC__PORT: "9000"
+      SPATIAL_GAME__CROSS_ZONE__ENABLED: "true"
+      SPATIAL_GAME__CROSS_ZONE__GHOST_TTL: "500ms"
+
+# room-service gets election config:
+  room-service:
+    environment:
+      SPATIAL_POSTGRES__DSN: ...
+      SPATIAL_REDIS__ADDR: ...
+      SPATIAL_ROOM__ELECTION__LEASE_NAME: "spatial-room-leader"
+      SPATIAL_ROOM__ELECTION__LEASE_TTL: "15s"
+      SPATIAL_ROOM__HEARTBEAT_SWEEPER_INTERVAL: "15s"
+```
+
+- [ ] **Step 2: Update `configs/game-server.yml`**
+
+```yaml
+# Append:
+game:
+  cross_zone:
+    enabled: false
+    ghost_ttl: 5s
+    neighbor_query_timeout: 2s
+```
+
+- [ ] **Step 3: Update `configs/room-service.yml`**
+
+```yaml
+# Append:
+room:
+  election:
+    lease_name: "spatial-room-leader"
+    lease_ttl: 15s
+  heartbeat_sweeper:
+    interval: 15s
+```
+
+- [ ] **Step 4: Create migration integration test**
+
+```go
+// test/integration/migration_test.go
+package integration
+import "testing"
+
+func TestZoneMigration(t *testing.T) {
+	t.Skip("zone migration E2E test — requires Testcontainers + multi-server cluster setup")
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add deploy/docker-compose/docker-compose.yml configs/game-server.yml configs/room-service.yml test/integration/migration_test.go
+git commit -m "feat: config files + test scaffold for distributed mode"
+```
 
 ### Spec coverage
 

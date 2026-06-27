@@ -1446,6 +1446,54 @@
 
 ---
 
+### Task 9: Config files + session resume integration test
+
+**Files:** Modify `configs/gateway.yml`, `configs/game-server.yml`. Create `test/integration/session_resume_test.go`. Modify `apps/game-server/main_test.go`.
+
+- [ ] **Step 1: Update `configs/gateway.yml`**
+
+```yaml
+gateway:
+  ws_port: 8080
+  jwt_secret: "dev-secret-key-change-in-production"
+  rate_limit:
+    per_connection: 100
+    per_ip: 500
+  drain:
+    timeout: 5s
+```
+
+- [ ] **Step 2: Update `configs/game-server.yml`**
+
+```yaml
+game:
+  session:
+    reconnect_window: 30s
+  delta_buffer:
+    capacity: 64
+```
+
+- [ ] **Step 3: Create session resume integration test scaffold**
+
+```go
+// test/integration/session_resume_test.go
+package integration
+import "testing"
+
+func TestSessionResumeAndDeltaReplay(t *testing.T) {
+	t.Skip("session resume E2E test — requires Testcontainers + Redis-backed session store")
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add configs/gateway.yml configs/game-server.yml test/integration/session_resume_test.go
+git commit -m "feat: config files + test scaffold for session resumption"
+```
+
+---
+
 ## Self-Review Checklist
 
 ### Spec coverage
