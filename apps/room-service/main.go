@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,7 +21,9 @@ import (
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/pkg/api"
 	"github.com/thaolaptrinh/spatial-server/pkg/config"
+	grpcinterceptor "github.com/thaolaptrinh/spatial-server/pkg/grpc"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
+	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
 	"github.com/thaolaptrinh/spatial-server/pkg/room"
 	"github.com/thaolaptrinh/spatial-server/pkg/storage"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
@@ -110,6 +113,18 @@ func main() {
 	}
 	logger.Info("migrations completed")
 
+	reg := metrics.NewRegistry()
+
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", reg.Handler())
+		metricsAddr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		logger.Info("metrics HTTP server starting", slog.String("addr", metricsAddr))
+		if err := (&http.Server{Addr: metricsAddr, Handler: mux}).ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics http serve error", slog.String("error", err.Error()))
+		}
+	}()
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
 		logger.Error("listen failed", slog.Int("port", cfg.GRPC.Port), slog.String("error", err.Error()))
@@ -119,7 +134,7 @@ func main() {
 	healthSrv := health.NewServer()
 	healthSrv.SetServingStatus("spatialserver.v1.RoomService", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpcinterceptor.ServerOptions("room-service", reg)...)
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
 	reflection.Register(srv)
 

@@ -27,7 +27,12 @@ type Config struct {
 	Gateway          GatewayConfig          `koanf:"gateway"`
 	RoomService      RoomServiceConfig      `koanf:"room_service"`
 	Game             GameConfig             `koanf:"game"`
+	Metrics          MetricsConfig          `koanf:"metrics"`
 	SpatialServerAPI SpatialServerAPIConfig `koanf:"spatial_api"`
+}
+
+type MetricsConfig struct {
+	Port int `koanf:"port"`
 }
 
 type ServiceConfig struct {
@@ -68,11 +73,12 @@ type RoomServiceConfig struct {
 }
 
 type GameConfig struct {
-	TickRate     time.Duration `koanf:"tick_rate"`
-	MaxEntities  int           `koanf:"max_entities"`
-	ZoneCellSize float64       `koanf:"zone_cell_size"`
-	AOIRadius    float64       `koanf:"aoi_radius"`
-	NPCs         []NPCSpec     `koanf:"npcs"`
+	TickRate         time.Duration `koanf:"tick_rate"`
+	SnapshotInterval int           `koanf:"snapshot_interval"`
+	MaxEntities      int           `koanf:"max_entities"`
+	ZoneCellSize     float64       `koanf:"zone_cell_size"`
+	AOIRadius        float64       `koanf:"aoi_radius"`
+	NPCs             []NPCSpec     `koanf:"npcs"`
 }
 
 type NPCSpec struct {

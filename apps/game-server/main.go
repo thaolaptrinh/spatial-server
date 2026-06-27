@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -17,11 +19,15 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/thaolaptrinh/spatial-server/internal/migration"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/pkg/config"
 	"github.com/thaolaptrinh/spatial-server/pkg/entity"
 	"github.com/thaolaptrinh/spatial-server/pkg/game"
+	grpcinterceptor "github.com/thaolaptrinh/spatial-server/pkg/grpc"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
+	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
+	"github.com/thaolaptrinh/spatial-server/pkg/storage"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
@@ -226,23 +232,56 @@ func main() {
 		os.Exit(1)
 	}
 
+	reg := metrics.NewRegistry()
+
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", reg.Handler())
+		metricsAddr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		logger.Info("metrics HTTP server starting", slog.String("addr", metricsAddr))
+		if err := (&http.Server{Addr: metricsAddr, Handler: mux}).ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics http serve error", slog.String("error", err.Error()))
+		}
+	}()
+
 	healthSrv := health.NewServer()
 	healthSrv.SetServingStatus("spatialserver.v1.GameServer", grpc_health_v1.HealthCheckResponse_SERVING)
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpcinterceptor.ServerOptions("game-server", reg)...)
 	grpc_health_v1.RegisterHealthServer(srv, healthSrv)
 	reflection.Register(srv)
 
 	gameCtx, gameCancel := context.WithCancel(context.Background())
-	g := game.New(serverID, game.WithTickRate(tickRate))
 
-	// Seed NPCs from config
-	for _, spec := range cfg.Game.NPCs {
-		npc := entity.New(types.NewEntityID(), spec.Type, types.RuntimeID(""))
-		npc.Position = spec.Position
-		npc.Behavior = spec.Behavior
-		npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(spec)}
-		g.AddEntity(npc)
+	pgPool, err := storage.NewPostgresPool(context.Background(), cfg.Postgres.DSN)
+	if err != nil {
+		logger.Error("connect to postgres failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer pgPool.Close()
+
+	if err := migration.Run(pgPool, "pkg/storage/migrations"); err != nil {
+		logger.Error("run migrations failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	snapRepo := storage.NewSnapshotStore(pgPool)
+	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, 100))
+
+	// Crash recovery: restore from latest snapshot
+	zoneID := types.ZoneID(string(serverID) + "-z1")
+	if snap, _, err := snapRepo.Latest(context.Background(), zoneID); err == nil {
+		hydrateFromSnapshot(g, snap)
+		logger.Info("recovered entities from snapshot", slog.String("zone", string(zoneID)))
+	} else {
+		// Seed NPCs from config
+		for _, spec := range cfg.Game.NPCs {
+			npc := entity.New(types.NewEntityID(), spec.Type, types.RuntimeID(""))
+			npc.Position = spec.Position
+			npc.Behavior = spec.Behavior
+			npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(spec)}
+			g.AddEntity(npc)
+		}
 	}
 
 	gs := newGameServerServer(g)
@@ -271,6 +310,40 @@ func main() {
 	heartbeatCancel()
 	srv.GracefulStop()
 	logger.Info("game-server stopped")
+}
+
+type snapshotAdapter struct {
+	repo    *storage.SnapshotStore
+	runtime string
+}
+
+func (s snapshotAdapter) Save(zoneID types.ZoneID, snap []byte, tick int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.repo.Save(ctx, string(zoneID), s.runtime, snap, tick); err != nil {
+		slog.Warn("snapshot save", slog.String("error", err.Error()))
+	}
+}
+
+func hydrateFromSnapshot(g *game.Game, data []byte) {
+	var rows []struct {
+		ID       string  `json:"id"`
+		Type     string  `json:"type"`
+		Behavior string  `json:"behavior"`
+		X        float64 `json:"x"`
+		Y        float64 `json:"y"`
+		Z        float64 `json:"z"`
+	}
+	if json.Unmarshal(data, &rows) != nil {
+		return
+	}
+	for _, r := range rows {
+		npc := entity.New(types.EntityID(r.ID), r.Type, types.RuntimeID(""))
+		npc.Position = types.Vector3{X: r.X, Y: r.Y, Z: r.Z}
+		npc.Behavior = r.Behavior
+		npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(config.NPCSpec{Behavior: r.Behavior, Position: npc.Position})}
+		g.AddEntity(npc)
+	}
 }
 
 func newBehaviorFor(spec config.NPCSpec) game.Behavior {

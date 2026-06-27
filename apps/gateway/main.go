@@ -19,6 +19,7 @@ import (
 	"github.com/thaolaptrinh/spatial-server/pkg/config"
 	"github.com/thaolaptrinh/spatial-server/pkg/gateway"
 	"github.com/thaolaptrinh/spatial-server/pkg/logging"
+	"github.com/thaolaptrinh/spatial-server/pkg/metrics"
 )
 
 type roomLookuper struct {
@@ -67,6 +68,18 @@ func main() {
 		resp, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
 		return err == nil && resp.GetStatus() == grpc_health_v1.HealthCheckResponse_SERVING
 	})
+
+	reg := metrics.NewRegistry()
+
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", reg.Handler())
+		metricsAddr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		logger.Info("metrics HTTP server starting", slog.String("addr", metricsAddr))
+		if err := (&http.Server{Addr: metricsAddr, Handler: mux}).ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics http serve error", slog.String("error", err.Error()))
+		}
+	}()
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Gateway.WSPort),

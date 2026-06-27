@@ -25,6 +25,9 @@ gateway:
   drain_timeout: 30s
 room_service:
   addr: "room-service:9000"
+metrics:
+  port: 9090
+
 spatial_api:
   default_zone_count: 1
   default_zone_size: 100
