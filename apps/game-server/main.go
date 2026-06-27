@@ -266,7 +266,7 @@ func main() {
 	}
 
 	snapRepo := storage.NewSnapshotStore(pgPool)
-	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, 100))
+	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, cfg.Game.SnapshotInterval))
 
 	// Crash recovery: restore from latest snapshot
 	zoneID := types.ZoneID(string(serverID) + "-z1")

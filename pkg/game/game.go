@@ -2,6 +2,8 @@ package game
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -44,26 +46,37 @@ type ghostEntry struct {
 	expiresAt time.Time
 }
 
+type SnapshotWriter interface {
+	Save(zoneID types.ZoneID, snapshot []byte, tick int64)
+}
+
 type Game struct {
-	ServerID  types.ServerID
-	Entities  map[types.EntityID]*entity.Entity
-	Zones     map[types.ZoneID]*zone.Zone
-	Inbox     chan InboundPacket
-	Outbox    chan OutboundPacket
-	aoi       *aoi.AOI
-	aoiRadius float64
-	tickRate  time.Duration
-	entityAOI map[types.EntityID]*entityAOIState
-	ghosts    map[types.EntityID]*ghostEntry
-	ghostTTL  time.Duration
-	cmds      chan func()
-	mu        sync.Mutex
+	ServerID      types.ServerID
+	Entities      map[types.EntityID]*entity.Entity
+	Zones         map[types.ZoneID]*zone.Zone
+	Inbox         chan InboundPacket
+	Outbox        chan OutboundPacket
+	aoi           *aoi.AOI
+	aoiRadius     float64
+	tickRate      time.Duration
+	entityAOI     map[types.EntityID]*entityAOIState
+	ghosts        map[types.EntityID]*ghostEntry
+	ghostTTL      time.Duration
+	cmds          chan func()
+	mu            sync.Mutex
+	snapshotter   SnapshotWriter
+	snapshotEvery int
+	tickCount     int64
 }
 
 type Option func(*Game)
 
 func WithTickRate(d time.Duration) Option {
 	return func(g *Game) { g.tickRate = d }
+}
+
+func WithSnapshotter(w SnapshotWriter, every int) Option {
+	return func(g *Game) { g.snapshotter = w; g.snapshotEvery = every }
 }
 
 func New(sid types.ServerID, opts ...Option) *Game {
@@ -172,12 +185,43 @@ func (g *Game) tick() {
 		case pkt := <-g.Inbox:
 			g.dispatch(pkt)
 		default:
+			g.tickCount++
+			if g.snapshotter != nil && g.snapshotEvery > 0 && g.tickCount%int64(g.snapshotEvery) == 0 {
+				g.snapshotAllZones()
+			}
 			g.simulate(g.tickRate)
 			g.detectZoneBoundaries()
 			g.updateVisibility()
 			g.sweepGhosts()
 			return
 		}
+	}
+}
+
+func (g *Game) snapshotAllZones() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for zid := range g.Zones {
+		var rows []map[string]any
+		for _, e := range g.Entities {
+			if e.ZoneID != zid {
+				continue
+			}
+			rows = append(rows, map[string]any{
+				"id":       string(e.ID),
+				"type":     e.Type,
+				"behavior": e.Behavior,
+				"x":        e.Position.X,
+				"y":        e.Position.Y,
+				"z":        e.Position.Z,
+			})
+		}
+		data, err := json.Marshal(rows)
+		if err != nil {
+			slog.Warn("marshal snapshot", slog.String("error", err.Error()))
+			continue
+		}
+		g.snapshotter.Save(zid, data, g.tickCount)
 	}
 }
 

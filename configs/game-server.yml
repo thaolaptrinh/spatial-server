@@ -13,6 +13,7 @@ grpc:
 
 game:
   tick_rate: 50ms
+  snapshot_interval: 100
   max_entities: 5000
   zone_cell_size: 100
   aoi_radius: 300
