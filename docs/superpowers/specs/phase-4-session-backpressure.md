@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Phase 3 makes the platform multi-server, but every client disconnect is still **final**: the in-memory `session.Pool` (`pkg/session/session.go`) drops the session immediately, and the Game Server despawns the entity on `KIND_DISCONNECT` (`apps/game-server/main.go:164`). A one-second network blip forces full re-authentication and state re-sync. There is also no flow control: the Gateway relays unbounded, the per-client send channel is a fixed 64-slot buffer with silent drops (`apps/game-server/main.go:119`), and a slow client or a flooding client can starve the relay goroutines.
+Phase 3 makes the platform multi-server, but every client disconnect is still **final**: the in-memory `session.Pool` (`internal/gateway/session.go`) drops the session immediately, and the Game Server despawns the entity on `KIND_DISCONNECT` (`apps/game-server/main.go:164`). A one-second network blip forces full re-authentication and state re-sync. There is also no flow control: the Gateway relays unbounded, the per-client send channel is a fixed 64-slot buffer with silent drops (`apps/game-server/main.go:119`), and a slow client or a flooding client can starve the relay goroutines.
 
 Phase 4 adds production-grade **durability** and **flow control**:
 
@@ -77,11 +77,11 @@ After this phase, temporary disconnects are seamless and the platform degrades s
 
 ## Components
 
-### 1. Redis-Backed Session Store (`pkg/session/store.go`)
+### 1. Redis-Backed Session Store (`internal/gateway/store.go`)
 
-New file. The current `session.Pool` (`pkg/session/session.go`) is purely in-memory with a `byID map[string]*Session`. Phase 4 keeps `Pool` for the per-connection live state but adds a **Redis-backed token store** for resumption.
+New file. The current `session.Pool` (`internal/gateway/session.go`) is purely in-memory with a `byID map[string]*Session`. Phase 4 keeps `Pool` for the per-connection live state but adds a **Redis-backed token store** for resumption.
 
-**`SessionStore` interface (defined in the consumer — `pkg/gateway`):**
+**`SessionStore` interface (defined in the consumer — `internal/gateway`):**
 
 ```go
 type SessionStore interface {
@@ -92,12 +92,12 @@ type SessionStore interface {
 }
 ```
 
-**`redisSessionStore` implementation (in `pkg/session/`):**
+**`redisSessionStore` implementation (in `internal/gateway/`):**
 
 - `Issue`: generate 32 crypto-random bytes, base64url-encode (44 chars, per ADR-022), `SET session:{token} <json> EX 60`.
 - `Lookup`: `GET session:{token}`; on hit, `Touch` resets TTL (sliding window).
 - `Revoke`: `DEL session:{token}`.
-- Uses the existing `redis.Client` from `pkg/storage` (`storage.NewRedisClient`, `pkg/storage/storage.go:30`).
+- Uses the existing `redis.Client` from `internal/storage` (`storage.NewRedisClient`, `internal/storage/storage.go:30`).
 
 **Redis key value (ADR-022):**
 
@@ -108,13 +108,13 @@ Value: { player_id, runtime_id, zone_id, game_server_addr,
 TTL:   60s (sliding — each access resets)
 ```
 
-### 2. Session Token Issuance + Resume (`pkg/gateway/handler.go`)
+### 2. Session Token Issuance + Resume (`internal/gateway/handler.go`)
 
-The current `handleWS` (`pkg/gateway/handler.go:61`) validates a JWT and immediately upgrades. Phase 4 adds two connection paths:
+The current `handleWS` (`internal/gateway/handler.go:61`) validates a JWT and immediately upgrades. Phase 4 adds two connection paths:
 
 **Path A — New connection (JWT):**
 
-1. Validate JWT (unchanged, `pkg/gateway/handler.go:68`).
+1. Validate JWT (unchanged, `internal/gateway/handler.go:68`).
 2. Upgrade to WebSocket.
 3. `sessionStore.Issue(...)` → token.
 4. Send `session_established` control message `{session_token}` to client.
@@ -129,7 +129,7 @@ The current `handleWS` (`pkg/gateway/handler.go:61`) validates a JWT and immedia
 
 **New relay kinds** (add to `game_server.proto` `Kind` enum): `KIND_RECONNECT = 4`, `KIND_PEER_DISCONNECTED = 5`, `KIND_PLAYER_DISCONNECTED = 6`.
 
-### 3. Entity Session State Machine (`pkg/game/lifecycle.go`)
+### 3. Entity Session State Machine (`internal/game/lifecycle.go`)
 
 New file. The current Game Server removes the entity immediately on `KIND_DISCONNECT` (`apps/game-server/main.go:164`). Phase 4 introduces a per-entity state machine:
 
@@ -145,7 +145,7 @@ ACTIVE ──(peer_disconnected)──► DISCONNECTED ──(30s timeout)──
 
 Tracked in a new `sessionStates map[types.EntityID]*sessionState` on `Game`, where `sessionState{status, disconnectedAt, timer}`.
 
-### 4. Delta Ring-Buffer (`pkg/game/deltabuffer.go`)
+### 4. Delta Ring-Buffer (`internal/game/deltabuffer.go`)
 
 New file. One per active/disconnected session. While ADR-022 specifies buffering during the `DISCONNECTED` window, this implementation buffers continuously (simpler, bounded memory) so a reconnect always has recent context.
 
@@ -166,9 +166,9 @@ type DeltaRingBuffer struct {
 
 Memory budget: ~10 KB per disconnected player for 1000 deltas (ADR-022 tradeoff).
 
-### 5. Backpressure: Write Deadline + Bounded Queue (`pkg/gateway/handler.go`)
+### 5. Backpressure: Write Deadline + Bounded Queue (`internal/gateway/handler.go`)
 
-The current `relayWS` (`pkg/gateway/handler.go:96`) writes to the WebSocket with no deadline and drops silently when the Game Server send channel is full. Phase 4 enforces flow control:
+The current `relayWS` (`internal/gateway/handler.go:96`) writes to the WebSocket with no deadline and drops silently when the Game Server send channel is full. Phase 4 enforces flow control:
 
 **5a. WebSocket write deadline:**
 
@@ -181,11 +181,11 @@ The current `relayWS` (`pkg/gateway/handler.go:96`) writes to the WebSocket with
 - On send when channel full: drop the **oldest** packet (drain one), push the new, increment `drops`. Emit Prometheus counter `gateway_dropped_packets_total{reason="send_queue_full"}`.
 - Rationale (ADR-021): a slow client must not block the Game Server relay goroutine.
 
-### 6. Rate Limiting (`pkg/gateway/ratelimit.go`)
+### 6. Rate Limiting (`internal/gateway/ratelimit.go`)
 
 New file. Implements two token buckets per ADR-021:
 
-**Per-connection bucket:** 100 msg/s default. Checked in the WS-read → Relay-Send pump (`pkg/gateway/handler.go:139`) before each `stream.Send`. On violation: drop packet, increment `gateway_rate_limit_drops_total{scope="connection"}`. After 3 violations (ADR-018): warn → disconnect.
+**Per-connection bucket:** 100 msg/s default. Checked in the WS-read → Relay-Send pump (`internal/gateway/handler.go:139`) before each `stream.Send`. On violation: drop packet, increment `gateway_rate_limit_drops_total{scope="connection"}`. After 3 violations (ADR-018): warn → disconnect.
 
 **Per-IP bucket:** 500 msg/s aggregate. A shared `sync.Map[string]*tokenBucket` keyed by `r.RemoteAddr` IP. Checked alongside the per-connection bucket. On violation: drop + counter `gateway_rate_limit_drops_total{scope="ip"}`.
 
@@ -204,7 +204,7 @@ func (b *tokenBucket) Allow() bool { /* refill, deduct, return */ }
 
 Parameters read from dynamic config on every refill (ADR-021: "no restart required to change limits"). Config keys: `gateway.rate_limit.per_connection_msg_per_sec`, `gateway.rate_limit.per_ip_msg_per_sec`.
 
-### 7. Graceful Drain (`pkg/gateway/drain.go`)
+### 7. Graceful Drain (`internal/gateway/drain.go`)
 
 New file. The current Gateway main exits on the first signal with no drain. Phase 4 adds:
 
@@ -273,24 +273,24 @@ This satisfies ADR-021 readiness semantics and ADR-011 client-impact ("clients r
 
 | File | Action | Detail |
 |------|--------|--------|
-| `pkg/session/store.go` | Create | `SessionStore` interface + `redisSessionStore` (Issue/Lookup/Touch/Revoke) |
-| `pkg/session/store_test.go` | Create | Redis-backed tests (miniredis or Testcontainer) |
-| `pkg/session/session.go` | Modify | Add `SessionRecord` struct, `SourceIP`, `GameServerAddr` fields |
-| `pkg/session/token.go` | Create | Crypto-random 32-byte token generation (base64url) |
-| `pkg/gateway/handler.go` | Modify | Session-token issuance + resume paths, write deadline, bounded send queue |
-| `pkg/gateway/handler_test.go` | Modify | Resume-path + drop-policy unit tests |
-| `pkg/gateway/ratelimit.go` | Create | Token bucket: per-connection + per-IP, dynamic config |
-| `pkg/gateway/ratelimit_test.go` | Create | Token bucket math + overflow tests |
-| `pkg/gateway/drain.go` | Create | Graceful drain on SIGTERM: stop accept, finish sessions, timeout |
-| `pkg/gateway/gateway.go` | Modify | Track active connections for drain, expose `Drain(ctx)` |
-| `pkg/gateway/gateway_test.go` | Modify | Drain behavior tests |
+| `internal/gateway/store.go` | Create | `SessionStore` interface + `redisSessionStore` (Issue/Lookup/Touch/Revoke) |
+| `internal/gateway/store_test.go` | Create | Redis-backed tests (miniredis or Testcontainer) |
+| `internal/gateway/session.go` | Modify | Add `SessionRecord` struct, `SourceIP`, `GameServerAddr` fields |
+| `internal/gateway/token.go` | Create | Crypto-random 32-byte token generation (base64url) |
+| `internal/gateway/handler.go` | Modify | Session-token issuance + resume paths, write deadline, bounded send queue |
+| `internal/gateway/handler_test.go` | Modify | Resume-path + drop-policy unit tests |
+| `internal/gateway/ratelimit.go` | Create | Token bucket: per-connection + per-IP, dynamic config |
+| `internal/gateway/ratelimit_test.go` | Create | Token bucket math + overflow tests |
+| `internal/gateway/drain.go` | Create | Graceful drain on SIGTERM: stop accept, finish sessions, timeout |
+| `internal/gateway/gateway.go` | Modify | Track active connections for drain, expose `Drain(ctx)` |
+| `internal/gateway/gateway_test.go` | Modify | Drain behavior tests |
 | `apps/gateway/main.go` | Modify | Wire SessionStore (Redis), rate limiter, drain on signal |
-| `pkg/game/lifecycle.go` | Create | Entity session state machine (ACTIVE/DISCONNECTED/DESPAWNED) + 30s timer |
-| `pkg/game/lifecycle_test.go` | Create | State-transition + timer tests |
-| `pkg/game/deltabuffer.go` | Create | `DeltaRingBuffer` (cap 1000, Push/Drain, drop counter) |
-| `pkg/game/deltabuffer_test.go` | Create | Ring-buffer overflow + ordering tests |
-| `pkg/game/game.go` | Modify | Add `sessionStates` map, wire buffer into updateVisibility/tick |
-| `pkg/game/game_test.go` | Modify | Disconnect/reconnect simulation tests |
+| `internal/game/lifecycle.go` | Create | Entity session state machine (ACTIVE/DISCONNECTED/DESPAWNED) + 30s timer |
+| `internal/game/lifecycle_test.go` | Create | State-transition + timer tests |
+| `internal/game/deltabuffer.go` | Create | `DeltaRingBuffer` (cap 1000, Push/Drain, drop counter) |
+| `internal/game/deltabuffer_test.go` | Create | Ring-buffer overflow + ordering tests |
+| `internal/game/game.go` | Modify | Add `sessionStates` map, wire buffer into updateVisibility/tick |
+| `internal/game/game_test.go` | Modify | Disconnect/reconnect simulation tests |
 | `apps/game-server/main.go` | Modify | Handle KIND_RECONNECT/KIND_PEER_DISCONNECTED/KIND_PLAYER_DISCONNECTED; wire delta buffer + lifecycle |
 | `apps/game-server/main_test.go` | Modify | Reconnect replay tests |
 | `proto/spatialserver/v1/game_server.proto` | Modify | Add `KIND_RECONNECT=4`, `KIND_PEER_DISCONNECTED=5`, `KIND_PLAYER_DISCONNECTED=6` to Kind enum |

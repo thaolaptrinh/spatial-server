@@ -37,7 +37,7 @@ Defines the scope, dependencies, and deliverables for all remaining phases (1Fin
 - Implement SpatialServerAPI (CreateRuntime/DestroyRuntime/GetRuntimeInfo/ListRuntimes)
 - Real integration tests via Testcontainers (replace skipped test)
 - Gateway hardening: `/ready`+`/live` endpoints, packet size cap, graceful drain
-- Use `pkg/config` consistently across all services (remove inline koanf)
+- Use `internal/config` consistently across all services (remove inline koanf)
 
 **Out of scope:** Multi-server, zone migration, metrics, TLS
 

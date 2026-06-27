@@ -8,7 +8,7 @@
 
 **Tech Stack:** cert-manager 1.14+, Ed25519 (`crypto/ed25519`), JWKS, golang-jwt/v5 (`jwt.SigningMethodEd25519`), Prometheus adapter, K3s HPA v2 (custom metrics), `go test -fuzz`, Go pprof, k6 (optional). Module path: `github.com/thaolaptrinh/spatial-server`.
 
-**Pre-existing files (from Phase 5):** `infra/helm/{gateway,room-service,game-server,monitoring}/` (charts with CPU-only HPA, ingress TLS placeholder); `infra/k3s/{namespace,priority-classes,lease-rbac,ingress,network-policies}.yaml`; `pkg/observability/{otel,grpc}.go` (OTel tracing); `pkg/auth/jwt.go` (current HMAC-only `ValidateToken(tokenStr, secret) (*Claims, error)`); `apps/gateway/main.go` (constructs `gateway.NewHandler(cache, lookuper, []byte(jwtSecret))`); `configs/gateway.yml` (`gateway.jwt_secret`); `infra/helm/gateway/templates/hpa.yaml` (CPU-only); `infra/helm/gateway/templates/ingress.yaml` (TLS placeholder secretName).
+**Pre-existing files (from Phase 5):** `infra/helm/{gateway,room-service,game-server,monitoring}/` (charts with CPU-only HPA, ingress TLS placeholder); `infra/k3s/{namespace,priority-classes,lease-rbac,ingress,network-policies}.yaml`; `pkg/observability/{otel,grpc}.go` (OTel tracing); `internal/gateway/jwt.go` (current HMAC-only `ValidateToken(tokenStr, secret) (*Claims, error)`); `apps/gateway/main.go` (constructs `gateway.NewHandler(cache, lookuper, []byte(jwtSecret))`); `configs/gateway.yml` (`gateway.jwt_secret`); `infra/helm/gateway/templates/hpa.yaml` (CPU-only); `infra/helm/gateway/templates/ingress.yaml` (TLS placeholder secretName).
 
 **Validation note:** Infra tasks (Tasks 1, 4) use `helm lint`/`kubectl apply --dry-run`. Go tasks (2, 3, 5, 6, 7, 8) use real TDD (`go test` — write test, verify fail, implement, verify pass). Inline `# === path ===` lines inside a code block denote separate files to create.
 
@@ -129,7 +129,7 @@ func loadPool(caPath string) (*x509.CertPool, error) {
 
 ### Task 3: JWT migration — HMAC → EdDSA + JWKS
 
-**Files:** Create `pkg/auth/jwks.go`, `pkg/auth/jwks_test.go`; Modify `pkg/auth/jwt.go`, `apps/gateway/main.go`, `configs/gateway.yml`.
+**Files:** Create `internal/gateway/jwks.go`, `internal/gateway/jwks_test.go`; Modify `internal/gateway/jwt.go`, `apps/gateway/main.go`, `configs/gateway.yml`.
 
 - [ ] **Step 1: Write failing test**
 
@@ -155,7 +155,7 @@ func TestJWKSProvider_VerifiesEdDSAToken(t *testing.T) {
 func encodeKey(k ed25519.PublicKey) string { return base64.RawURLEncoding.EncodeToString(k) }
 ```
 
-- [ ] **Step 2: Verify fail** — `go test ./pkg/auth/... -run TestJWKSProvider -v` → FAIL (`NewJWKSProvider` undefined).
+- [ ] **Step 2: Verify fail** — `go test ./internal/gateway/... -run TestJWKSProvider -v` → FAIL (`NewJWKSProvider` undefined).
 
 - [ ] **Step 3: Implement jwks.go**
 
@@ -191,9 +191,9 @@ func (p *JWKSProvider) Verifier(kid string) jwt.Keyfunc {
 }
 ```
 
-- [ ] **Step 4: Verify pass** — `go test ./pkg/auth/... -race -v` → PASS.
+- [ ] **Step 4: Verify pass** — `go test ./internal/gateway/... -race -v` → PASS.
 
-- [ ] **Step 5: Modify jwt.go + wire gateway** — In `pkg/auth/jwt.go`: add an EdDSA verification path via the JWKS verifier; keep HMAC behind a deprecation flag `allow_hmac` for the migration window; when `allow_hmac=false`, reject HMAC tokens entirely. Update the `ValidateToken` signature if needed to accept `*JWKSProvider` + `kid`. `configs/gateway.yml`:
+- [ ] **Step 5: Modify jwt.go + wire gateway** — In `internal/gateway/jwt.go`: add an EdDSA verification path via the JWKS verifier; keep HMAC behind a deprecation flag `allow_hmac` for the migration window; when `allow_hmac=false`, reject HMAC tokens entirely. Update the `ValidateToken` signature if needed to accept `*JWKSProvider` + `kid`. `configs/gateway.yml`:
 
 ```yaml
 jwt:
@@ -205,7 +205,7 @@ jwt:
 
 `apps/gateway/main.go`: construct `auth.NewJWKSProvider(k.String("jwt.jwks_url"), k.Duration("jwt.refresh_interval"))`, start a background `Refresh()` loop every 5 min (or on-demand via HTTP handler), pass its `Verifier("...")` to `gateway.NewHandler` instead of `[]byte(jwtSecret)`. Deprecate `jwt.secret` config key.
 
-- [ ] **Step 6: Build + test + commit** — `go build ./... && go test ./pkg/auth/... -race`; then `git add pkg/auth apps/gateway/main.go configs/gateway.yml && git commit -m "feat: jwt migration to EdDSA + JWKS rotation (ADR-018)"`
+- [ ] **Step 6: Build + test + commit** — `go build ./... && go test ./internal/gateway/... -race`; then `git add internal/gateway apps/gateway/main.go configs/gateway.yml && git commit -m "feat: jwt migration to EdDSA + JWKS rotation (ADR-018)"`
 
 ---
 

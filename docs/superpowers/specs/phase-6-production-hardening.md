@@ -40,8 +40,8 @@ Exit criteria: every ADR-020 target met, every [ADR-011](../../adr/011-failure-r
                               │  (mTLS optional, internal gRPC)
         ┌─────────────────────▼─────────────────────┐
         │  Gateway                                 │
-        │  JWKS verifier — pkg/auth/jwks.go        │  fetches public keys every 5 min
-        │  EdDSA verify — pkg/auth/jwt.go          │  rejects HMAC tokens
+        │  JWKS verifier — internal/gateway/jwks.go        │  fetches public keys every 5 min
+        │  EdDSA verify — internal/gateway/jwt.go          │  rejects HMAC tokens
         └────┬──────────────────────────┬──────────┘
         mTLS │ gRPC                mTLS  │ gRPC
         ┌────▼──────────┐         ┌──────▼───────┐
@@ -102,8 +102,8 @@ Replaces the current shared HMAC secret (`SPATIAL_GATEWAY__JWT_SECRET`) with asy
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `pkg/auth/jwt.go` | Modify | Add `EdDSA` (Ed25519) verification path; reject HMAC tokens; keep HMAC behind a deprecated flag for migration window |
-| `pkg/auth/jwks.go` | Create | JWKS fetcher: GET `<issuer>/.well-known/jwks.json`, cache keys by `kid`, background refresh every 5 min, fail-closed if refresh fails past TTL |
+| `internal/gateway/jwt.go` | Modify | Add `EdDSA` (Ed25519) verification path; reject HMAC tokens; keep HMAC behind a deprecated flag for migration window |
+| `internal/gateway/jwks.go` | Create | JWKS fetcher: GET `<issuer>/.well-known/jwks.json`, cache keys by `kid`, background refresh every 5 min, fail-closed if refresh fails past TTL |
 | `apps/gateway/main.go` | Modify | Wire `JWKSProvider` into auth middleware instead of static secret |
 | `configs/gateway.yml` | Modify | `jwt.jwks_url`, `jwt.refresh_interval: 5m`, `jwt.issuer` (deprecate `jwt.secret`) |
 
@@ -221,8 +221,8 @@ Exit gate: all green → production sign-off recorded in `docs/ops/production-si
 | `infra/helm/{gateway,game-server}/templates/hpa.yaml` | Modify (custom metrics) |
 | `infra/helm/{gateway,room-service,game-server}/templates/*` | Modify (mTLS mount, gated) |
 | `pkg/mtls/mtls.go` | Create |
-| `pkg/auth/jwt.go` | Modify (EdDSA) |
-| `pkg/auth/jwks.go` | Create |
+| `internal/gateway/jwt.go` | Modify (EdDSA) |
+| `internal/gateway/jwks.go` | Create |
 | `apps/{gateway,game-server}/main.go` | Modify (JWKS, pprof) |
 | `configs/gateway.yml` | Modify (jwks config) |
 | `benchmarks/framework/{client,report,latency}.go` | Create |

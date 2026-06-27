@@ -9,30 +9,30 @@
 **Tech Stack:** Go 1.25, gRPC streaming (`google.golang.org/grpc`), `github.com/redis/go-redis/v9`, `github.com/jackc/pgx/v5`, `k8s.io/client-go` (K3s Lease), protobuf, Testcontainers for integration tests.
 
 **Pre-existing files (checked before writing):**
-- `pkg/game/game.go` — single `aoi *aoi.AOI`, flat `Entities`, stub `AssignZone`/`ReleaseZone` at lines 122-128, `detectZoneBoundaries()` at line 183, `ghostTTL = 5s` at line 81
-- `pkg/aoi/aoi.go` — `AOI` grid with `Enter`/`Leave`/`Move`/`EntitiesInRange`/`CellCoord`/`Count`, no serialization
-- `pkg/gateway/gateway.go` — `RouterCache` TTL cache, `Set`/`Get` only
-- `pkg/gateway/handler.go` — `Handler` with `handleWS`/`relayWS`, dials game-server per connection
-- `pkg/room/room.go` — `ServerRegistry` (`Register`/`Heartbeat`/`LeastLoaded`/`Get`), `ZoneOwnership` (`Claim`/`Release`/`Lookup`), `ResolveZone`. `ServerInfo.LastBeat` set but never checked
+- `internal/game/game.go` — single `aoi *aoi.AOI`, flat `Entities`, stub `AssignZone`/`ReleaseZone` at lines 122-128, `detectZoneBoundaries()` at line 183, `ghostTTL = 5s` at line 81
+- `internal/game/aoi/aoi.go` — `AOI` grid with `Enter`/`Leave`/`Move`/`EntitiesInRange`/`CellCoord`/`Count`, no serialization
+- `internal/gateway/gateway.go` — `RouterCache` TTL cache, `Set`/`Get` only
+- `internal/gateway/handler.go` — `Handler` with `handleWS`/`relayWS`, dials game-server per connection
+- `internal/room/room.go` — `ServerRegistry` (`Register`/`Heartbeat`/`LeastLoaded`/`Get`), `ZoneOwnership` (`Claim`/`Release`/`Lookup`), `ResolveZone`. `ServerInfo.LastBeat` set but never checked
 - `apps/game-server/main.go` — `gameServerServer` implements only `Relay` (line 98), `clientRegistry` with 64-slot `chan []byte` (line 119)
 - `proto/spatialserver/v1/game_server.proto` — all RPCs declared (`AssignZone`, `ReleaseZone`, `MigrateEntity`, `ZoneStateSync`, `NotifyEntityEnter/Leave`, `SendEntityUpdate`, `QueryEntities`, `Relay`)
 - `proto/spatialserver/v1/room_service.proto` — has `PrepareTransfer`/`TransferZone`, no `WatchOwnership`
 - `proto/spatialserver/v1/common.proto` — `EntitySnapshot`, `ZoneSnapshot{zone_id, entities, aoi_state}`, `EntityEnterLeave`, `EntityUpdate`, `ZoneStatus` enum (`UNOWNED=1`, `ACTIVE=2`, `TRANSFERRING=3`, `ORPHAN=4`)
 - `internal/types/types.go` — `ZoneStatus` Go enum (`Unowned=0`,`Active=1`,`Transferring=2`,`Orphan=3`) with `ValidTransition`; sentinel errors `ErrNotFound`/`ErrConflict`/`ErrInvalidArg`/`ErrNotOwned`
-- Module path: `github.com/thaolaptrinh/spatial-server`; proto gen import: `spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"` (aliased `v1` in `pkg/game`)
+- Module path: `github.com/thaolaptrinh/spatial-server`; proto gen import: `spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"` (aliased `v1` in `internal/game`)
 
 ---
 
 ### Task 1: Multi-Zone Game Server Refactor
 
 **Files:**
-- Create: `pkg/game/peer.go`
-- Modify: `pkg/game/game.go`
-- Modify: `pkg/game/game_test.go`
+- Create: `internal/game/peer.go`
+- Modify: `internal/game/game.go`
+- Modify: `internal/game/game_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Add to `pkg/game/game_test.go`:
+  Add to `internal/game/game_test.go`:
 
   ```go
   func TestMultiZone_SeparateAOIGrids(t *testing.T) {
@@ -71,10 +71,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestMultiZone_SeparateAOIGrids -v`
+  Run: `go test ./internal/game/... -run TestMultiZone_SeparateAOIGrids -v`
   Expected: FAIL — `g.AssignZone` returns no error currently (returns nothing) and `AOIFor`/`ZoneOf` undefined.
 
-- [ ] **Step 3: Create `pkg/game/peer.go`**
+- [ ] **Step 3: Create `internal/game/peer.go`**
 
   ```go
   package game
@@ -149,7 +149,7 @@
   }
   ```
 
-- [ ] **Step 4: Refactor `pkg/game/game.go` for multi-zone**
+- [ ] **Step 4: Refactor `internal/game/game.go` for multi-zone**
 
   Replace the `Game` struct and the zone/entity/tick methods. The full new top section (imports stay, add `"fmt"`):
 
@@ -478,20 +478,20 @@
 
 - [ ] **Step 5: Update the two existing tests that referenced the removed `g.aoi` field**
 
-  In `pkg/game/game_test.go`, change `g.aoi.EntitiesInRange(...)` usages:
+  In `internal/game/game_test.go`, change `g.aoi.EntitiesInRange(...)` usages:
   - In `TestAOI_AddEntityRegistersInAOI`: assign a zone first and use `g.AOIFor(types.ZoneID("z1")).EntitiesInRange(...)`. Set `e.ZoneID = types.ZoneID("z1")` and call `g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100))` before `g.AddEntity(e)`.
   - In `TestAOI_RemoveEntityRemovesFromAOI`: same zone setup, use `g.AOIFor(types.ZoneID("z1"))`.
   - In `TestTick_EntityFarAwayNoSpawn`: same change for the `g.aoi.EntitiesInRange` line.
 
 - [ ] **Step 6: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... -v -race -cover`
+  Run: `go test ./internal/game/... -v -race -cover`
   Expected: PASS — all existing tests plus the two new multi-zone tests green.
 
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add pkg/game/peer.go pkg/game/game.go pkg/game/game_test.go
+  git add internal/game/peer.go internal/game/game.go internal/game/game_test.go
   git commit -m "refactor: make game server zone-aware with per-zone aoi grids"
   ```
 
@@ -516,7 +516,7 @@
   	"github.com/stretchr/testify/require"
 
   	"github.com/thaolaptrinh/spatial-server/internal/types"
-  	"github.com/thaolaptrinh/spatial-server/pkg/game"
+  	"github.com/thaolaptrinh/spatial-server/internal/game"
   	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
   )
 
@@ -556,7 +556,7 @@
 
 - [ ] **Step 3: Implement handlers in `apps/game-server/main.go`**
 
-  Add imports (`pkg/zone` already used in tests; add `"github.com/thaolaptrinh/spatial-server/pkg/zone"` and `types`). Append handler methods to `gameServerServer`:
+  Add imports (`internal/game/zone` already used in tests; add `"github.com/thaolaptrinh/spatial-server/internal/game/zone"` and `types`). Append handler methods to `gameServerServer`:
 
   ```go
   func (s *gameServerServer) AssignZone(ctx context.Context, req *spatialserverv1.AssignZoneRequest) (*spatialserverv1.AssignZoneResponse, error) {
@@ -581,7 +581,7 @@
   }
   ```
 
-  Add `"github.com/thaolaptrinh/spatial-server/pkg/zone"` to the import block.
+  Add `"github.com/thaolaptrinh/spatial-server/internal/game/zone"` to the import block.
 
 - [ ] **Step 4: Run tests to verify pass**
 
@@ -600,14 +600,14 @@
 ### Task 3: Cross-Zone AOI Boundary + QueryEntities
 
 **Files:**
-- Modify: `pkg/game/peer.go`
-- Create: `pkg/game/boundary.go`
-- Create: `pkg/game/boundary_test.go`
+- Modify: `internal/game/peer.go`
+- Create: `internal/game/boundary.go`
+- Create: `internal/game/boundary_test.go`
 - Modify: `apps/game-server/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/game/boundary_test.go`:
+  Create `internal/game/boundary_test.go`:
 
   ```go
   package game
@@ -620,8 +620,8 @@
   	"github.com/stretchr/testify/require"
 
   	"github.com/thaolaptrinh/spatial-server/internal/types"
-  	"github.com/thaolaptrinh/spatial-server/pkg/entity"
-  	"github.com/thaolaptrinh/spatial-server/pkg/zone"
+  	"github.com/thaolaptrinh/spatial-server/internal/game/entity"
+  	"github.com/thaolaptrinh/spatial-server/internal/game/zone"
   )
 
   func TestReconcileGhosts_QueriesNeighborAndStoresGhosts(t *testing.T) {
@@ -647,10 +647,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestReconcileGhosts -v`
+  Run: `go test ./internal/game/... -run TestReconcileGhosts -v`
   Expected: FAIL — `SetNeighborQuerier`, `ReconcileNeighborGhosts`, `neighborEntity`, `ghostStoreCount` undefined.
 
-- [ ] **Step 3: Add the neighbor-querier seam to `pkg/game/peer.go`**
+- [ ] **Step 3: Add the neighbor-querier seam to `internal/game/peer.go`**
 
   Append to `peer.go`:
 
@@ -678,7 +678,7 @@
 
   Add a `querier NeighborQuerier` field to the `PeerRegistry` struct.
 
-- [ ] **Step 4: Create `pkg/game/boundary.go`**
+- [ ] **Step 4: Create `internal/game/boundary.go`**
 
   ```go
   package game
@@ -841,13 +841,13 @@
 
 - [ ] **Step 6: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... ./apps/game-server/... -v -race`
+  Run: `go test ./internal/game/... ./apps/game-server/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add pkg/game/peer.go pkg/game/boundary.go pkg/game/boundary_test.go pkg/game/game.go apps/game-server/main.go
+  git add internal/game/peer.go internal/game/boundary.go internal/game/boundary_test.go internal/game/game.go apps/game-server/main.go
   git commit -m "feat: cross-zone aoi boundary with neighbor ghost reconciliation"
   ```
 
@@ -856,14 +856,14 @@
 ### Task 4: NotifyEntityEnter / NotifyEntityLeave / SendEntityUpdate
 
 **Files:**
-- Modify: `pkg/game/boundary.go`
-- Modify: `pkg/game/boundary_test.go`
-- Modify: `pkg/game/peer.go`
+- Modify: `internal/game/boundary.go`
+- Modify: `internal/game/boundary_test.go`
+- Modify: `internal/game/peer.go`
 - Modify: `apps/game-server/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/game/boundary_test.go`:
+  Append to `internal/game/boundary_test.go`:
 
   ```go
   func TestNotifyEntityEnter_StoresRemoteGhost(t *testing.T) {
@@ -893,10 +893,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestNotifyEntityEnter -v`
+  Run: `go test ./internal/game/... -run TestNotifyEntityEnter -v`
   Expected: FAIL — `ApplyEntityEnter`/`ApplyEntityLeave`/`ApplyEntityUpdate`/`ghostStoreFor` undefined.
 
-- [ ] **Step 3: Implement the apply methods in `pkg/game/boundary.go`**
+- [ ] **Step 3: Implement the apply methods in `internal/game/boundary.go`**
 
   ```go
   func (g *Game) ghostStoreFor(zoneID types.ZoneID) map[types.EntityID]*ghostEntry {
@@ -982,13 +982,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... ./apps/game-server/... -v -race`
+  Run: `go test ./internal/game/... ./apps/game-server/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/game/boundary.go pkg/game/boundary_test.go apps/game-server/main.go
+  git add internal/game/boundary.go internal/game/boundary_test.go apps/game-server/main.go
   git commit -m "feat: notify entity enter/leave and cross-zone entity update handlers"
   ```
 
@@ -997,13 +997,13 @@
 ### Task 5: Zone Migration — PrepareTransfer + Status Machine
 
 **Files:**
-- Modify: `pkg/room/room.go`
-- Create: `pkg/room/migration.go`
-- Create: `pkg/room/migration_test.go`
+- Modify: `internal/room/room.go`
+- Create: `internal/room/migration.go`
+- Create: `internal/room/migration_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/room/migration_test.go`:
+  Create `internal/room/migration_test.go`:
 
   ```go
   package room
@@ -1057,10 +1057,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/room/... -run TestPrepareTransfer -v`
+  Run: `go test ./internal/room/... -run TestPrepareTransfer -v`
   Expected: FAIL — `newZoneTable`, `MigrationCoordinator` undefined.
 
-- [ ] **Step 3: Extend `pkg/room/room.go` with a status-aware ownership table**
+- [ ] **Step 3: Extend `internal/room/room.go` with a status-aware ownership table**
 
   Append to `room.go`:
 
@@ -1100,7 +1100,7 @@
    }
   ```
 
-- [ ] **Step 4: Create `pkg/room/migration.go`**
+- [ ] **Step 4: Create `internal/room/migration.go`**
 
   ```go
   package room
@@ -1165,13 +1165,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/room/... -v -race`
+  Run: `go test ./internal/room/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/room/room.go pkg/room/migration.go pkg/room/migration_test.go
+  git add internal/room/room.go internal/room/migration.go internal/room/migration_test.go
   git commit -m "feat: zone migration coordinator with prepare/complete transfer"
   ```
 
@@ -1180,14 +1180,14 @@
 ### Task 6: Zone Migration — ZoneStateSync Streaming + AOI Serialize
 
 **Files:**
-- Modify: `pkg/aoi/aoi.go`
-- Modify: `pkg/aoi/aoi_test.go`
-- Modify: `pkg/game/game.go`
+- Modify: `internal/game/aoi/aoi.go`
+- Modify: `internal/game/aoi/aoi_test.go`
+- Modify: `internal/game/game.go`
 - Modify: `apps/game-server/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/aoi/aoi_test.go`:
+  Append to `internal/game/aoi/aoi_test.go`:
 
   ```go
   func TestSerializeDeserialize_RoundTrip(t *testing.T) {
@@ -1206,10 +1206,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/aoi/... -run TestSerializeDeserialize -v`
+  Run: `go test ./internal/game/aoi/... -run TestSerializeDeserialize -v`
   Expected: FAIL — `Serialize`/`Deserialize` undefined.
 
-- [ ] **Step 3: Implement serialization in `pkg/aoi/aoi.go`**
+- [ ] **Step 3: Implement serialization in `internal/game/aoi/aoi.go`**
 
   Add an import for `encoding/gob` and `bytes`. The serialization captures positions (cells are derived):
 
@@ -1251,7 +1251,7 @@
   }
   ```
 
-- [ ] **Step 4: Add `SnapshotZone` to `Game` in `pkg/game/game.go`**
+- [ ] **Step 4: Add `SnapshotZone` to `Game` in `internal/game/game.go`**
 
   ```go
   func (g *Game) SnapshotZone(zoneID types.ZoneID) *v1.ZoneSnapshot {
@@ -1342,13 +1342,13 @@
 
 - [ ] **Step 6: Run tests to verify pass**
 
-  Run: `go test ./pkg/aoi/... ./pkg/game/... ./apps/game-server/... -v -race`
+  Run: `go test ./internal/game/aoi/... ./internal/game/... ./apps/game-server/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add pkg/aoi/aoi.go pkg/aoi/aoi_test.go pkg/game/game.go apps/game-server/main.go
+  git add internal/game/aoi/aoi.go internal/game/aoi/aoi_test.go internal/game/game.go apps/game-server/main.go
   git commit -m "feat: zone state sync streaming with aoi serialization"
   ```
 
@@ -1357,13 +1357,13 @@
 ### Task 7: Entity Migration — MigrateEntity
 
 **Files:**
-- Modify: `pkg/game/game.go`
-- Modify: `pkg/game/game_test.go`
+- Modify: `internal/game/game.go`
+- Modify: `internal/game/game_test.go`
 - Modify: `apps/game-server/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/game/game_test.go`:
+  Append to `internal/game/game_test.go`:
 
   ```go
   func TestMigrateEntityIn_RemovesFromSourceAndAddsToTarget(t *testing.T) {
@@ -1395,10 +1395,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestMigrateEntity -v`
+  Run: `go test ./internal/game/... -run TestMigrateEntity -v`
   Expected: FAIL — `MigrateEntityIn`/`MigrateEntityOut` undefined.
 
-- [ ] **Step 3: Implement migration methods in `pkg/game/game.go`**
+- [ ] **Step 3: Implement migration methods in `internal/game/game.go`**
 
   ```go
   func (g *Game) MigrateEntityIn(snap *v1.EntitySnapshot, targetZone types.ZoneID) {
@@ -1426,13 +1426,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... ./apps/game-server/... -v -race`
+  Run: `go test ./internal/game/... ./apps/game-server/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/game/game.go pkg/game/game_test.go apps/game-server/main.go
+  git add internal/game/game.go internal/game/game_test.go apps/game-server/main.go
   git commit -m "feat: migrate entity across zone boundaries"
   ```
 
@@ -1441,13 +1441,13 @@
 ### Task 8: Room Service HA via Leader Election
 
 **Files:**
-- Create: `pkg/room/leaderelection.go`
-- Create: `pkg/room/leaderelection_test.go`
+- Create: `internal/room/leaderelection.go`
+- Create: `internal/room/leaderelection_test.go`
 - Modify: `apps/room-service/main.go` (placeholder wiring note — cluster required to run)
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/room/leaderelection_test.go`:
+  Create `internal/room/leaderelection_test.go`:
 
   ```go
   package room
@@ -1485,10 +1485,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/room/... -run TestLeadershipGate -v`
+  Run: `go test ./internal/room/... -run TestLeadershipGate -v`
   Expected: FAIL — `NewLeadershipGate`, `LeadershipGate` undefined.
 
-- [ ] **Step 3: Create `pkg/room/leaderelection.go`**
+- [ ] **Step 3: Create `internal/room/leaderelection.go`**
 
   ```go
   package room
@@ -1542,7 +1542,7 @@
   // build tag in leaderelection_k8s.go to keep client-go out of unit tests.
   ```
 
-  Create `pkg/room/leaderelection_k8s.go` (build-tagged):
+  Create `internal/room/leaderelection_k8s.go` (build-tagged):
 
   ```go
   //go:build k8sledelection
@@ -1554,7 +1554,7 @@
   	"time"
 
   	coordinationv1 "k8s.io/api/coordination/v1"
-  	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+  	metav1 "k8s.io/apimachinery/internal/rooms/meta/v1"
   	"k8s.io/client-go/kubernetes"
   	"k8s.io/client-go/rest"
   )
@@ -1617,7 +1617,7 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/room/... -v -race`
+  Run: `go test ./internal/room/... -v -race`
   Expected: PASS (the k8s file is excluded by build tag, so no client-go needed).
 
   Add `k8s.io/client-go` to `go.mod` only when building with the tag:
@@ -1628,7 +1628,7 @@
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/room/leaderelection.go pkg/room/leaderelection_k8s.go pkg/room/leaderelection_test.go apps/room-service/main.go go.mod go.sum
+  git add internal/room/leaderelection.go internal/room/leaderelection_k8s.go internal/room/leaderelection_test.go apps/room-service/main.go go.mod go.sum
   git commit -m "feat: room service ha leadership gate with k3s lease"
   ```
 
@@ -1637,12 +1637,12 @@
 ### Task 9: Heartbeat-Timeout Sweeper
 
 **Files:**
-- Create: `pkg/room/sweeper.go`
-- Create: `pkg/room/sweeper_test.go`
+- Create: `internal/room/sweeper.go`
+- Create: `internal/room/sweeper_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/room/sweeper_test.go`:
+  Create `internal/room/sweeper_test.go`:
 
   ```go
   package room
@@ -1697,10 +1697,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/room/... -run TestSweeper -v`
+  Run: `go test ./internal/room/... -run TestSweeper -v`
   Expected: FAIL — `NewSweeper`, `Config`, `sweep` undefined.
 
-- [ ] **Step 3: Create `pkg/room/sweeper.go`**
+- [ ] **Step 3: Create `internal/room/sweeper.go`**
 
   ```go
   package room
@@ -1800,13 +1800,13 @@
 
 - [ ] **Step 4: Run tests to verify pass**
 
-  Run: `go test ./pkg/room/... -v -race`
+  Run: `go test ./internal/room/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add pkg/room/sweeper.go pkg/room/sweeper_test.go
+  git add internal/room/sweeper.go internal/room/sweeper_test.go
   git commit -m "feat: heartbeat timeout sweeper with orphan zone reassignment"
   ```
 
@@ -1816,15 +1816,15 @@
 
 **Files:**
 - Modify: `proto/spatialserver/v1/room_service.proto`
-- Modify: `pkg/room/room.go`
-- Modify: `pkg/gateway/gateway.go`
-- Modify: `pkg/gateway/handler.go`
-- Modify: `pkg/gateway/gateway_test.go`
+- Modify: `internal/room/room.go`
+- Modify: `internal/gateway/gateway.go`
+- Modify: `internal/gateway/handler.go`
+- Modify: `internal/gateway/gateway_test.go`
 - Modify: `apps/room-service/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/gateway/gateway_test.go`:
+  Append to `internal/gateway/gateway_test.go`:
 
   ```go
   func TestRouterCache_Invalidate(t *testing.T) {
@@ -1858,7 +1858,7 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/gateway/... -run "TestRouterCache_Invalidate|TestRouterCache_ApplyChange" -v`
+  Run: `go test ./internal/gateway/... -run "TestRouterCache_Invalidate|TestRouterCache_ApplyChange" -v`
   Expected: FAIL — `Invalidate`/`ApplyChange` undefined, `OwnershipChange` type not generated yet.
 
 - [ ] **Step 3: Extend the proto**
@@ -1884,7 +1884,7 @@
 
   Regenerate: `make proto`
 
-- [ ] **Step 4: Add fan-out hooks in `pkg/room/room.go`**
+- [ ] **Step 4: Add fan-out hooks in `internal/room/room.go`**
 
   Append a watcher manager:
 
@@ -1932,7 +1932,7 @@
 
   Add `spatialserverv1` and `"fmt"` imports to room.go.
 
-- [ ] **Step 5: Add `Invalidate`/`ApplyChange` to `pkg/gateway/gateway.go`**
+- [ ] **Step 5: Add `Invalidate`/`ApplyChange` to `internal/gateway/gateway.go`**
 
   ```go
   func (rc *RouterCache) Invalidate(zoneID string) {
@@ -1946,7 +1946,7 @@
   }
   ```
 
-  Add a type alias in `pkg/gateway/gateway.go`:
+  Add a type alias in `internal/gateway/gateway.go`:
 
   ```go
   import spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
@@ -1954,7 +1954,7 @@
   type OwnershipChange = spatialserverv1.OwnershipChange
   ```
 
-- [ ] **Step 6: Start the `WatchOwnership` subscriber in `pkg/gateway/handler.go`**
+- [ ] **Step 6: Start the `WatchOwnership` subscriber in `internal/gateway/handler.go`**
 
   Add a field `watcher ZoneWatcher` to `Handler` and a `StartOwnershipWatch(ctx)` method:
 
@@ -2021,13 +2021,13 @@
 
 - [ ] **Step 8: Run tests to verify pass**
 
-  Run: `go test ./pkg/gateway/... ./pkg/room/... -v -race`
+  Run: `go test ./internal/gateway/... ./internal/room/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 9: Commit**
 
   ```bash
-  git add proto/spatialserver/v1/room_service.proto proto/gen/ pkg/room/room.go pkg/gateway/gateway.go pkg/gateway/handler.go pkg/gateway/gateway_test.go apps/room-service/main.go
+  git add proto/spatialserver/v1/room_service.proto proto/gen/ internal/room/room.go internal/gateway/gateway.go internal/gateway/handler.go internal/gateway/gateway_test.go apps/room-service/main.go
   git commit -m "feat: push-based routing cache invalidation via watch ownership"
   ```
 
@@ -2129,7 +2129,7 @@ git commit -m "feat: config files + test scaffold for distributed mode"
 - `types.ZoneStatus` Go enum values (`Unowned=0`,`Active=1`,`Transferring=2`,`Orphan=3`) used in Task 5 ✅
 - `types.ServerStatusShutdown`/`Active` used in Task 9 ✅
 - Proto getters match generated names (`GetZoneId`, `GetEntityId`, `GetPosition`, `GetSuccess`) ✅
-- `v1` alias for proto gen package used consistently in `pkg/game` ✅
+- `v1` alias for proto gen package used consistently in `internal/game` ✅
 - `PeerRegistry.Client(serverID)` / `Upsert(serverID, addr)` signatures stable across tasks ✅
 - `ghostEntry` extended with `kind`/`originZone` in Task 3; `detectZoneBoundaries` updated to set `ghostLocal` ✅
 

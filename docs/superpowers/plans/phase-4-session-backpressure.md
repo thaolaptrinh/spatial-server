@@ -9,12 +9,12 @@
 **Tech Stack:** Go 1.25, `github.com/redis/go-redis/v9`, `github.com/alicebob/miniredis/v2` (Redis unit tests), `github.com/coder/websocket`, gRPC streaming, protobuf, `sync/atomic`.
 
 **Pre-existing files (checked before writing):**
-- `pkg/session/session.go` — in-memory `Pool` (`byID map[string]*Session`), `Session{ClientID,PlayerID,ZoneID,ServerID,Closed}`
-- `pkg/storage/storage.go:30` — `NewRedisClient(addr) (*redis.Client, error)`
-- `pkg/gateway/handler.go` — `handleWS` validates JWT then upgrades (line 61); `relayWS` dials game-server, two goroutine pumps, **no write deadline** (line 165), sends `KIND_DISCONNECT` on exit (line 176)
-- `pkg/gateway/gateway.go` — `RouterCache` (Phase 3 adds `Invalidate`/`ApplyChange`)
+- `internal/gateway/session.go` — in-memory `Pool` (`byID map[string]*Session`), `Session{ClientID,PlayerID,ZoneID,ServerID,Closed}`
+- `internal/storage/storage.go:30` — `NewRedisClient(addr) (*redis.Client, error)`
+- `internal/gateway/handler.go` — `handleWS` validates JWT then upgrades (line 61); `relayWS` dials game-server, two goroutine pumps, **no write deadline** (line 165), sends `KIND_DISCONNECT` on exit (line 176)
+- `internal/gateway/gateway.go` — `RouterCache` (Phase 3 adds `Invalidate`/`ApplyChange`)
 - `apps/game-server/main.go` — `clientRegistry` with `ch chan []byte` buffered 64 (line 119); `Relay` removes entity on `KIND_DISCONNECT` (line 164)
-- `pkg/game/game.go` — Phase 3 zone-aware `Game` with `entityZone`, `AddEntity`/`removeEntity`
+- `internal/game/game.go` — Phase 3 zone-aware `Game` with `entityZone`, `AddEntity`/`removeEntity`
 - `proto/spatialserver/v1/game_server.proto` — `Kind` enum: `KIND_UNSPECIFIED=0`, `KIND_DATA=1`, `KIND_CONNECT=2`, `KIND_DISCONNECT=3`
 - `internal/types/types.go` — `EntityID`, `ZoneID`, sentinel errors
 - Module path: `github.com/thaolaptrinh/spatial-server`
@@ -24,14 +24,14 @@
 ### Task 1: Redis-Backed Session Store + Token Generation
 
 **Files:**
-- Create: `pkg/session/token.go`
-- Create: `pkg/session/store.go`
-- Create: `pkg/session/store_test.go`
+- Create: `internal/gateway/token.go`
+- Create: `internal/gateway/store.go`
+- Create: `internal/gateway/store_test.go`
 - Modify: `go.mod` (add miniredis dev dep)
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/session/store_test.go`:
+  Create `internal/gateway/store_test.go`:
 
   ```go
   package session
@@ -112,12 +112,12 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/session/... -run TestIssue -v`
+  Run: `go test ./internal/gateway/... -run TestIssue -v`
   Expected: FAIL — `SessionRecord`, `RedisSessionStore`, `NewRedisSessionStore`, `sessionKeyPrefix` undefined; missing miniredis dependency.
 
   Add the test dependency: `go get github.com/alicebob/miniredis/v2@latest`
 
-- [ ] **Step 3: Create `pkg/session/token.go`**
+- [ ] **Step 3: Create `internal/gateway/token.go`**
 
   ```go
   package session
@@ -148,7 +148,7 @@
   }
   ```
 
-- [ ] **Step 4: Create `pkg/session/store.go`**
+- [ ] **Step 4: Create `internal/gateway/store.go`**
 
   ```go
   package session
@@ -227,13 +227,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/session/... -v -race`
+  Run: `go test ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/session/token.go pkg/session/store.go pkg/session/store_test.go go.mod go.sum
+  git add internal/gateway/token.go internal/gateway/store.go internal/gateway/store_test.go go.mod go.sum
   git commit -m "feat: redis-backed session token store with sliding ttl"
   ```
 
@@ -243,12 +243,12 @@
 
 **Files:**
 - Modify: `proto/spatialserver/v1/game_server.proto`
-- Modify: `pkg/gateway/handler.go`
-- Modify: `pkg/gateway/handler_test.go`
+- Modify: `internal/gateway/handler.go`
+- Modify: `internal/gateway/handler_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/gateway/handler_test.go` (or create it if absent). The test verifies that a new connection issues a token and that a resume connection looks it up:
+  Append to `internal/gateway/handler_test.go` (or create it if absent). The test verifies that a new connection issues a token and that a resume connection looks it up:
 
   ```go
   package gateway
@@ -260,7 +260,7 @@
   	"github.com/stretchr/testify/assert"
   	"github.com/stretchr/testify/require"
 
-  	"github.com/thaolaptrinh/spatial-server/pkg/session"
+  	"github.com/thaolaptrinh/spatial-server/internal/gateway"
   )
 
   type stubStore struct {
@@ -311,7 +311,7 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/gateway/... -run "TestIssueSessionToken|TestResolveResumeToken" -v`
+  Run: `go test ./internal/gateway/... -run "TestIssueSessionToken|TestResolveResumeToken" -v`
   Expected: FAIL — `Handler.store`, `issueForNew`, `resolveResume` undefined.
 
 - [ ] **Step 3: Extend the proto `Kind` enum**
@@ -332,7 +332,7 @@
 
   Regenerate: `make proto`
 
-- [ ] **Step 4: Add the `SessionStore` interface and resume helpers to `pkg/gateway/handler.go`**
+- [ ] **Step 4: Add the `SessionStore` interface and resume helpers to `internal/gateway/handler.go`**
 
   ```go
   type SessionStore interface {
@@ -388,13 +388,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/gateway/... -v -race`
+  Run: `go test ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add proto/spatialserver/v1/game_server.proto proto/gen/ pkg/gateway/handler.go pkg/gateway/handler_test.go apps/gateway/main.go
+  git add proto/spatialserver/v1/game_server.proto proto/gen/ internal/gateway/handler.go internal/gateway/handler_test.go apps/gateway/main.go
   git commit -m "feat: session token issuance and resume path with reconnect kinds"
   ```
 
@@ -403,14 +403,14 @@
 ### Task 3: Reconnection Window — Entity Session State Machine
 
 **Files:**
-- Create: `pkg/game/lifecycle.go`
-- Create: `pkg/game/lifecycle_test.go`
-- Modify: `pkg/game/game.go`
+- Create: `internal/game/lifecycle.go`
+- Create: `internal/game/lifecycle_test.go`
+- Modify: `internal/game/game.go`
 - Modify: `apps/game-server/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/game/lifecycle_test.go`:
+  Create `internal/game/lifecycle_test.go`:
 
   ```go
   package game
@@ -473,10 +473,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestMarkDisconnected -v`
+  Run: `go test ./internal/game/... -run TestMarkDisconnected -v`
   Expected: FAIL — `SessionDisconnected`/`SessionActive`, `MarkDisconnected`/`MarkReconnected`/`SweepDisconnected`, `lifecycleClock`/`reconnectWindow` undefined.
 
-- [ ] **Step 3: Create `pkg/game/lifecycle.go`**
+- [ ] **Step 3: Create `internal/game/lifecycle.go`**
 
   ```go
   package game
@@ -557,7 +557,7 @@
 
 - [ ] **Step 4: Wire the new fields into `Game`**
 
-  In `pkg/game/game.go`, add fields to the `Game` struct and initialize in `New`:
+  In `internal/game/game.go`, add fields to the `Game` struct and initialize in `New`:
 
   ```go
   // fields
@@ -595,13 +595,13 @@
 
 - [ ] **Step 6: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... -v -race`
+  Run: `go test ./internal/game/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add pkg/game/lifecycle.go pkg/game/lifecycle_test.go pkg/game/game.go apps/game-server/main.go
+  git add internal/game/lifecycle.go internal/game/lifecycle_test.go internal/game/game.go apps/game-server/main.go
   git commit -m "feat: entity reconnection window with disconnected state machine"
   ```
 
@@ -610,14 +610,14 @@
 ### Task 4: Delta Ring-Buffer
 
 **Files:**
-- Create: `pkg/game/deltabuffer.go`
-- Create: `pkg/game/deltabuffer_test.go`
-- Modify: `pkg/game/game.go`
-- Modify: `pkg/game/game_test.go`
+- Create: `internal/game/deltabuffer.go`
+- Create: `internal/game/deltabuffer_test.go`
+- Modify: `internal/game/game.go`
+- Modify: `internal/game/game_test.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/game/deltabuffer_test.go`:
+  Create `internal/game/deltabuffer_test.go`:
 
   ```go
   package game
@@ -666,10 +666,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/game/... -run TestDeltaRingBuffer -v`
+  Run: `go test ./internal/game/... -run TestDeltaRingBuffer -v`
   Expected: FAIL — `NewDeltaRingBuffer` undefined.
 
-- [ ] **Step 3: Create `pkg/game/deltabuffer.go`**
+- [ ] **Step 3: Create `internal/game/deltabuffer.go`**
 
   ```go
   package game
@@ -735,7 +735,7 @@
 
 - [ ] **Step 4: Add per-entity buffer access + record-on-dispatch to `Game`**
 
-  Append to `pkg/game/game.go`:
+  Append to `internal/game/game.go`:
 
   ```go
   func (g *Game) DeltaBufferFor(id types.EntityID) *DeltaRingBuffer {
@@ -771,7 +771,7 @@
   ```
 
 
-  Add a sanity test in `pkg/game/game_test.go`:
+  Add a sanity test in `internal/game/game_test.go`:
 
   ```go
   func TestDispatch_BuffersPositionUpdate(t *testing.T) {
@@ -793,13 +793,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/game/... -v -race`
+  Run: `go test ./internal/game/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/game/deltabuffer.go pkg/game/deltabuffer_test.go pkg/game/game.go pkg/game/game_test.go
+  git add internal/game/deltabuffer.go internal/game/deltabuffer_test.go internal/game/game.go internal/game/game_test.go
   git commit -m "feat: per-session delta ring buffer for reconnect replay"
   ```
 
@@ -808,7 +808,7 @@
 ### Task 5: Backpressure — Write Deadline + Bounded Send Queue
 
 **Files:**
-- Modify: `pkg/gateway/handler.go`
+- Modify: `internal/gateway/handler.go`
 - Modify: `apps/game-server/main.go`
 - Create: `apps/game-server/relayqueue_test.go`
 
@@ -961,7 +961,7 @@
   ```
 
 
-- [ ] **Step 4: Add the 5s write deadline in `pkg/gateway/handler.go`**
+- [ ] **Step 4: Add the 5s write deadline in `internal/gateway/handler.go`**
 
   In the Relay-Recv → WS-write pump (`relayWS`), set a deadline before each write:
 
@@ -995,13 +995,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./apps/game-server/... ./pkg/gateway/... -v -race`
+  Run: `go test ./apps/game-server/... ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add apps/game-server/main.go apps/game-server/relayqueue_test.go pkg/gateway/handler.go
+  git add apps/game-server/main.go apps/game-server/relayqueue_test.go internal/gateway/handler.go
   git commit -m "feat: ws write deadline and bounded send queue with drop counter"
   ```
 
@@ -1010,13 +1010,13 @@
 ### Task 6: Per-Connection Rate Limiting
 
 **Files:**
-- Create: `pkg/gateway/ratelimit.go`
-- Create: `pkg/gateway/ratelimit_test.go`
-- Modify: `pkg/gateway/handler.go`
+- Create: `internal/gateway/ratelimit.go`
+- Create: `internal/gateway/ratelimit_test.go`
+- Modify: `internal/gateway/handler.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/gateway/ratelimit_test.go`:
+  Create `internal/gateway/ratelimit_test.go`:
 
   ```go
   package gateway
@@ -1060,10 +1060,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/gateway/... -run TestTokenBucket -v`
+  Run: `go test ./internal/gateway/... -run TestTokenBucket -v`
   Expected: FAIL — `newTokenBucket`/`newConnectionLimiter` undefined.
 
-- [ ] **Step 3: Create `pkg/gateway/ratelimit.go`**
+- [ ] **Step 3: Create `internal/gateway/ratelimit.go`**
 
   ```go
   package gateway
@@ -1124,7 +1124,7 @@
 
 - [ ] **Step 4: Wire the per-connection limiter into the WS-read pump**
 
-  In `pkg/gateway/handler.go`, give `Handler` a `connLimitRate float64` (default 100) and create a limiter per connection in `relayWS`:
+  In `internal/gateway/handler.go`, give `Handler` a `connLimitRate float64` (default 100) and create a limiter per connection in `relayWS`:
 
   ```go
   limiter := newConnectionLimiter(float64(h.connLimitRate), float64(h.connLimitRate), time.Now)
@@ -1151,13 +1151,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/gateway/... -v -race`
+  Run: `go test ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/gateway/ratelimit.go pkg/gateway/ratelimit_test.go pkg/gateway/handler.go
+  git add internal/gateway/ratelimit.go internal/gateway/ratelimit_test.go internal/gateway/handler.go
   git commit -m "feat: per-connection token bucket rate limiting"
   ```
 
@@ -1166,13 +1166,13 @@
 ### Task 7: Per-IP Rate Limiting
 
 **Files:**
-- Modify: `pkg/gateway/ratelimit.go`
-- Modify: `pkg/gateway/ratelimit_test.go`
-- Modify: `pkg/gateway/handler.go`
+- Modify: `internal/gateway/ratelimit.go`
+- Modify: `internal/gateway/ratelimit_test.go`
+- Modify: `internal/gateway/handler.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Append to `pkg/gateway/ratelimit_test.go`:
+  Append to `internal/gateway/ratelimit_test.go`:
 
   ```go
   func TestIPLimiter_AggregatesAcrossConnections(t *testing.T) {
@@ -1197,10 +1197,10 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/gateway/... -run TestIPLimiter -v`
+  Run: `go test ./internal/gateway/... -run TestIPLimiter -v`
   Expected: FAIL — `newIPLimiter` undefined.
 
-- [ ] **Step 3: Add `ipLimiter` in `pkg/gateway/ratelimit.go`**
+- [ ] **Step 3: Add `ipLimiter` in `internal/gateway/ratelimit.go`**
 
   ```go
   import "sync"
@@ -1264,13 +1264,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/gateway/... -v -race`
+  Run: `go test ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/gateway/ratelimit.go pkg/gateway/ratelimit_test.go pkg/gateway/handler.go
+  git add internal/gateway/ratelimit.go internal/gateway/ratelimit_test.go internal/gateway/handler.go
   git commit -m "feat: per-ip aggregate token bucket rate limiting"
   ```
 
@@ -1279,14 +1279,14 @@
 ### Task 8: Graceful Drain
 
 **Files:**
-- Create: `pkg/gateway/drain.go`
-- Create: `pkg/gateway/drain_test.go`
-- Modify: `pkg/gateway/gateway.go`
+- Create: `internal/gateway/drain.go`
+- Create: `internal/gateway/drain_test.go`
+- Modify: `internal/gateway/gateway.go`
 - Modify: `apps/gateway/main.go`
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `pkg/gateway/drain_test.go`:
+  Create `internal/gateway/drain_test.go`:
 
   ```go
   package gateway
@@ -1326,12 +1326,12 @@
 
 - [ ] **Step 2: Run test to verify it fails**
 
-  Run: `go test ./pkg/gateway/... -run TestDrain -v`
+  Run: `go test ./internal/gateway/... -run TestDrain -v`
   Expected: FAIL — `Gateway`, `SetNotReady`/`SetReady`/`IsReady`/`ReadinessCheck` undefined.
 
 - [ ] **Step 3: Add the `Gateway` container and drain logic**
 
-  Create `pkg/gateway/drain.go`:
+  Create `internal/gateway/drain.go`:
 
   ```go
   package gateway
@@ -1415,7 +1415,7 @@
 
 - [ ] **Step 4: Integrate drain into the relay and main**
 
-  In `pkg/gateway/handler.go`, wrap each relayed session with the gateway's wait group: call `g.TrackSession()` before launching `relayWS` and `defer g.FinishSession()` inside it. Add a `/ready` route in `NewHandler` wired to `g.ReadinessCheck`. Send a Close frame on drain:
+  In `internal/gateway/handler.go`, wrap each relayed session with the gateway's wait group: call `g.TrackSession()` before launching `relayWS` and `defer g.FinishSession()` inside it. Add a `/ready` route in `NewHandler` wired to `g.ReadinessCheck`. Send a Close frame on drain:
 
   ```go
   _ = conn.CloseStatus(websocket.StatusCode(1001), "server shutting down")
@@ -1434,13 +1434,13 @@
 
 - [ ] **Step 5: Run tests to verify pass**
 
-  Run: `go test ./pkg/gateway/... -v -race`
+  Run: `go test ./internal/gateway/... -v -race`
   Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add pkg/gateway/drain.go pkg/gateway/drain_test.go pkg/gateway/handler.go apps/gateway/main.go
+  git add internal/gateway/drain.go internal/gateway/drain_test.go internal/gateway/handler.go apps/gateway/main.go
   git commit -m "feat: graceful gateway drain with readiness semantics"
   ```
 

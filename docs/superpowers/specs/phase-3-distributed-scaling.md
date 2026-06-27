@@ -71,7 +71,7 @@ Data plane (client packets) is fully P2P: Gateway → Game Server → Game Serve
 
 ## Components
 
-### 1. Multi-Zone Game Server (`pkg/game/`)
+### 1. Multi-Zone Game Server (`internal/game/`)
 
 The current `Game` struct holds a single global `*aoi.AOI` and flat `Entities`/`entityAOI` maps. Phase 3 makes the Game Server **zone-aware**: it may own multiple zones, each with its own AOI grid, and it tracks a peer registry for cross-server calls.
 
@@ -80,7 +80,7 @@ The current `Game` struct holds a single global `*aoi.AOI` and flat `Entities`/`
 - Replace the single `aoi` field with `aoiIndex map[types.ZoneID]*aoi.AOI` (one grid per owned zone).
 - Add `peerRegistry` — a mapping from `types.ZoneID` → neighbor Game Server gRPC address, populated when a zone is assigned and its neighbors resolved via Room Service `LookupZone`.
 - Add `ghostStore map[types.ZoneID]map[types.EntityID]*ghostEntry` — ghost entities representing entities in neighbor zones (ADR-003, 500ms TTL already partially present in `ghostEntry`).
-- `AssignZone` / `ReleaseZone` become real methods that create/destroy the per-zone AOI grid and entity sets, replacing the current stubs at `pkg/game/game.go:122-128`.
+- `AssignZone` / `ReleaseZone` become real methods that create/destroy the per-zone AOI grid and entity sets, replacing the current stubs at `internal/game/game.go:122-128`.
 
 **New fields on `Game`:**
 
@@ -92,7 +92,7 @@ The current `Game` struct holds a single global `*aoi.AOI` and flat `Entities`/`
 | `peers` | `*PeerRegistry` | Neighbor GS gRPC clients for cross-zone RPCs |
 | `crossCh` | `chan crossZoneEvent` | Buffered channel for outbound cross-zone notifications |
 
-### 2. Cross-Zone Peer Registry (`pkg/game/peer.go`)
+### 2. Cross-Zone Peer Registry (`internal/game/peer.go`)
 
 New file. A `PeerRegistry` holds live gRPC connections to neighbor Game Servers and exposes typed helpers around the `GameServer` client:
 
@@ -126,20 +126,20 @@ The `gameServerServer` struct (currently only implements `Relay` at `apps/game-s
 | `SendEntityUpdate` | Update ghost position + propagate to local entities whose AOI overlaps the ghost |
 | `QueryEntities` | Return snapshots of entities within radius of a grid cell (used by neighbors building their ghost set) |
 
-### 4. Cross-Zone AOI Boundary Detection (`pkg/game/boundary.go`)
+### 4. Cross-Zone AOI Boundary Detection (`internal/game/boundary.go`)
 
-New file. Extends the existing `detectZoneBoundaries()` logic (`pkg/game/game.go:183`) which currently only creates local ghosts. The new logic:
+New file. Extends the existing `detectZoneBoundaries()` logic (`internal/game/game.go:183`) which currently only creates local ghosts. The new logic:
 
 1. On each tick, for each entity near a zone edge (within `aoiRadius` of the zone border), determine which neighbor zones' AOI would overlap.
 2. If a neighbor subscription does not yet exist for that zone, establish one (`peers.NotifyEnter`).
 3. Periodically (configurable, default 1s) call `peers.QueryEntities` on the neighbor for the overlapping region, reconcile ghost set.
 4. When an entity crosses fully into a neighbor zone, trigger `MigrateEntity` to the neighbor owner, remove locally, emit despawn to relay clients.
 
-Ghost entities use the existing `ghostEntry` type with the 500ms TTL from ADR-003 (currently `ghostTTL = 5s` at `pkg/game/game.go:81` — adjust to 500ms per ADR, make configurable).
+Ghost entities use the existing `ghostEntry` type with the 500ms TTL from ADR-003 (currently `ghostTTL = 5s` at `internal/game/game.go:81` — adjust to 500ms per ADR, make configurable).
 
-### 5. Room Service: Ownership & Migration (`pkg/room/` + `apps/room-service/main.go`)
+### 5. Room Service: Ownership & Migration (`internal/room/` + `apps/room-service/main.go`)
 
-The current Room Service stores state in-memory (`ServerRegistry`, `ZoneOwnership` in `pkg/room/room.go`). Phase 1Finish wires these to PostgreSQL; Phase 3 adds the **coordinator logic** that sits on top.
+The current Room Service stores state in-memory (`ServerRegistry`, `ZoneOwnership` in `internal/room/room.go`). Phase 1Finish wires these to PostgreSQL; Phase 3 adds the **coordinator logic** that sits on top.
 
 **`PrepareTransfer(PrepareTransferRequest)`:**
 
@@ -157,9 +157,9 @@ The current Room Service stores state in-memory (`ServerRegistry`, `ZoneOwnershi
 6. Room Service pushes routing update to Gateways (Component 7).
 7. Source GS releases zone resources.
 
-### 6. Heartbeat-Timeout Sweeper (`pkg/room/sweeper.go`)
+### 6. Heartbeat-Timeout Sweeper (`internal/room/sweeper.go`)
 
-New file. A background goroutine started in `apps/room-service/main.go`. Current code has no sweeper — `ServerInfo.LastBeat` (`pkg/room/room.go:18`) is set but never checked.
+New file. A background goroutine started in `apps/room-service/main.go`. Current code has no sweeper — `ServerInfo.LastBeat` (`internal/room/room.go:18`) is set but never checked.
 
 **Behavior (ADR-011):**
 
@@ -172,9 +172,9 @@ New file. A background goroutine started in `apps/room-service/main.go`. Current
 - Emit ownership-change events to the push stream (Component 7).
 - Use a PostgreSQL advisory lock during reassignment to prevent split-brain across the HA pair (ADR-011, "PostgreSQL is the tiebreaker").
 
-### 7. Push-Based Routing-Cache Invalidation (`pkg/gateway/`)
+### 7. Push-Based Routing-Cache Invalidation (`internal/gateway/`)
 
-The current `RouterCache` (`pkg/gateway/gateway.go`) is a pure TTL cache (5s). Phase 3 adds a **subscription** to Room Service ownership changes.
+The current `RouterCache` (`internal/gateway/gateway.go`) is a pure TTL cache (5s). Phase 3 adds a **subscription** to Room Service ownership changes.
 
 **New proto RPC** (add to `room_service.proto`):
 
@@ -193,7 +193,7 @@ message OwnershipChange {
 
 **Room Service change:** maintain an in-memory list of active watchers (Gateway stream handles). On any ownership mutation (`Claim`, `Release`, migration completion, sweeper reassignment), fan-out an `OwnershipChange` to all watchers.
 
-### 8. Room Service HA via K3s Lease (`pkg/room/leaderelection.go`)
+### 8. Room Service HA via K3s Lease (`internal/room/leaderelection.go`)
 
 New file. The Room Service deployment goes from 1 replica to 2 (active/passive). Only the leader serves `LookupZone`/`PrepareTransfer`/writes; the follower stands by.
 
@@ -256,25 +256,25 @@ New file. The Room Service deployment goes from 1 replica to 2 (active/passive).
 
 | File | Action | Detail |
 |------|--------|--------|
-| `pkg/game/game.go` | Modify | Multi-zone AOI map, per-zone entity partition, zone-aware AssignZone/ReleaseZone |
-| `pkg/game/peer.go` | Create | `PeerRegistry` + gRPC client cache for cross-zone RPCs |
-| `pkg/game/boundary.go` | Create | Cross-zone boundary detection, neighbor subscription, ghost reconciliation |
-| `pkg/game/boundary_test.go` | Create | Unit tests for boundary detection + ghost lifecycle |
-| `pkg/game/game_test.go` | Modify | Add multi-zone, cross-server AOI tests |
-| `pkg/aoi/aoi.go` | Modify | Add `Serialize()`/`Deserialize()` for zone transfer (AOI state in ZoneSnapshot) |
-| `pkg/aoi/aoi_test.go` | Modify | Serialization round-trip tests |
+| `internal/game/game.go` | Modify | Multi-zone AOI map, per-zone entity partition, zone-aware AssignZone/ReleaseZone |
+| `internal/game/peer.go` | Create | `PeerRegistry` + gRPC client cache for cross-zone RPCs |
+| `internal/game/boundary.go` | Create | Cross-zone boundary detection, neighbor subscription, ghost reconciliation |
+| `internal/game/boundary_test.go` | Create | Unit tests for boundary detection + ghost lifecycle |
+| `internal/game/game_test.go` | Modify | Add multi-zone, cross-server AOI tests |
+| `internal/game/aoi/aoi.go` | Modify | Add `Serialize()`/`Deserialize()` for zone transfer (AOI state in ZoneSnapshot) |
+| `internal/game/aoi/aoi_test.go` | Modify | Serialization round-trip tests |
 | `apps/game-server/main.go` | Modify | Implement AssignZone, ReleaseZone, ZoneStateSync, MigrateEntity, NotifyEntityEnter/Leave, SendEntityUpdate, QueryEntities |
 | `apps/game-server/main_test.go` | Modify | gRPC handler tests for new RPCs |
-| `pkg/room/room.go` | Modify | Add watcher fan-out hooks on Claim/Release/migration |
-| `pkg/room/sweeper.go` | Create | Heartbeat-timeout sweeper goroutine + orphan reassignment |
-| `pkg/room/sweeper_test.go` | Create | Sweeper logic tests (fake clock) |
-| `pkg/room/leaderelection.go` | Create | K3s Lease leader election via client-go |
-| `pkg/room/migration.go` | Create | Migration orchestrator: PrepareTransfer → stream → confirm → ownership update |
-| `pkg/room/migration_test.go` | Create | Migration state-machine tests |
+| `internal/room/room.go` | Modify | Add watcher fan-out hooks on Claim/Release/migration |
+| `internal/room/sweeper.go` | Create | Heartbeat-timeout sweeper goroutine + orphan reassignment |
+| `internal/room/sweeper_test.go` | Create | Sweeper logic tests (fake clock) |
+| `internal/room/leaderelection.go` | Create | K3s Lease leader election via client-go |
+| `internal/room/migration.go` | Create | Migration orchestrator: PrepareTransfer → stream → confirm → ownership update |
+| `internal/room/migration_test.go` | Create | Migration state-machine tests |
 | `apps/room-service/main.go` | Modify | Wire sweeper, leader election, PrepareTransfer/TransferZone/WatchOwnership handlers |
-| `pkg/gateway/gateway.go` | Modify | Add push-invalidation subscriber + `Invalidate(zoneID)` on RouterCache |
-| `pkg/gateway/handler.go` | Modify | Start WatchOwnership stream on handler init |
-| `pkg/gateway/gateway_test.go` | Modify | Push-invalidation tests |
+| `internal/gateway/gateway.go` | Modify | Add push-invalidation subscriber + `Invalidate(zoneID)` on RouterCache |
+| `internal/gateway/handler.go` | Modify | Start WatchOwnership stream on handler init |
+| `internal/gateway/gateway_test.go` | Modify | Push-invalidation tests |
 | `proto/spatialserver/v1/room_service.proto` | Modify | Add `WatchOwnership` RPC + `OwnershipChange`/`WatchRequest` messages |
 | `proto/gen/spatialserver/v1/*.pb.go` | Regenerate | `make proto` |
 | `deploy/docker-compose/docker-compose.yml` | Modify | Scale game-server to 2+, room-service to 2 replicas |
