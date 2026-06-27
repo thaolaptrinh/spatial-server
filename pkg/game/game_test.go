@@ -49,19 +49,66 @@ func TestRemoveEntity_NotFound(t *testing.T) {
 	assert.Equal(t, 0, g.EntityCount())
 }
 
+func TestMultiZone_SeparateAOIGrids(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	z1 := zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)
+	z2 := zone.New(types.ZoneID("z2"), types.RuntimeID("r1"), 1, 0, 100)
+	require.NoError(t, g.AssignZone(z1))
+	require.NoError(t, g.AssignZone(z2))
+
+	e1 := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e1.ZoneID = types.ZoneID("z1")
+	e1.Position = types.Vector3{X: 10, Z: 10}
+	g.AddEntity(e1)
+
+	e2 := entity.New(types.EntityID("e2"), "avatar", types.RuntimeID("r1"))
+	e2.ZoneID = types.ZoneID("z2")
+	e2.Position = types.Vector3{X: 10, Z: 10}
+	g.AddEntity(e2)
+
+	assert.Equal(t, 2, g.EntityCount())
+	assert.Equal(t, 1, g.AOIFor(types.ZoneID("z1")).Count())
+	assert.Equal(t, 1, g.AOIFor(types.ZoneID("z2")).Count())
+	assert.Equal(t, types.ZoneID("z1"), g.ZoneOf(types.EntityID("e1")))
+	assert.Equal(t, types.ZoneID("z2"), g.ZoneOf(types.EntityID("e2")))
+}
+
+func TestReleaseZone_TeardownAOIGrid(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	z1 := zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)
+	require.NoError(t, g.AssignZone(z1))
+	assert.NotNil(t, g.AOIFor(types.ZoneID("z1")))
+	require.NoError(t, g.ReleaseZone(types.ZoneID("z1")))
+	assert.Nil(t, g.AOIFor(types.ZoneID("z1")))
+}
+
 func TestAssignZone(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	z := zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)
-	g.AssignZone(z)
+	require.NoError(t, g.AssignZone(z))
 	assert.Equal(t, 1, len(g.Zones))
+}
+
+func TestAssignZone_Duplicate(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	z := zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)
+	require.NoError(t, g.AssignZone(z))
+	err := g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100))
+	assert.Error(t, err)
 }
 
 func TestReleaseZone(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	z := zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)
-	g.AssignZone(z)
-	g.ReleaseZone(types.ZoneID("z1"))
+	require.NoError(t, g.AssignZone(z))
+	require.NoError(t, g.ReleaseZone(types.ZoneID("z1")))
 	assert.Equal(t, 0, len(g.Zones))
+}
+
+func TestReleaseZone_NotFound(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	err := g.ReleaseZone(types.ZoneID("no-such"))
+	assert.Error(t, err)
 }
 
 func TestInboxSend(t *testing.T) {
@@ -131,22 +178,26 @@ func TestGhostEntity_ExpiresAfterTTL(t *testing.T) {
 
 func TestAOI_AddEntityRegistersInAOI(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)))
 	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.ZoneID = types.ZoneID("z1")
 	e.Position = types.Vector3{X: 10, Z: 10}
 	g.AddEntity(e)
 
-	visible := g.aoi.EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
+	visible := g.AOIFor(types.ZoneID("z1")).EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
 	assert.Contains(t, visible, types.EntityID("e1"))
 }
 
 func TestAOI_RemoveEntityRemovesFromAOI(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)))
 	e := entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1"))
+	e.ZoneID = types.ZoneID("z1")
 	e.Position = types.Vector3{X: 10, Z: 10}
 	g.AddEntity(e)
 	g.RemoveEntity(types.EntityID("e1"))
 
-	visible := g.aoi.EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
+	visible := g.AOIFor(types.ZoneID("z1")).EntitiesInRange(types.Vector3{X: 10, Z: 10}, 300)
 	assert.NotContains(t, visible, types.EntityID("e1"))
 }
 
@@ -203,11 +254,14 @@ func TestTick_EntityInRangeSpawns(t *testing.T) {
 }
 
 func TestTick_EntityFarAwayNoSpawn(t *testing.T) {
-	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("r1"), 0, 0, 100)))
 	eA := entity.New(types.EntityID("a"), "avatar", types.RuntimeID("r1"))
+	eA.ZoneID = types.ZoneID("z1")
 	eA.Position = types.Vector3{X: 0, Z: 0}
 	g.AddEntity(eA)
 	eB := entity.New(types.EntityID("b"), "avatar", types.RuntimeID("r1"))
+	eB.ZoneID = types.ZoneID("z1")
 	eB.Position = types.Vector3{X: 50000, Z: 50000}
 	g.AddEntity(eB)
 
@@ -216,7 +270,7 @@ func TestTick_EntityFarAwayNoSpawn(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	cancel()
 
-	visible := g.aoi.EntitiesInRange(types.Vector3{X: 0, Z: 0}, 300)
+	visible := g.AOIFor(types.ZoneID("z1")).EntitiesInRange(types.Vector3{X: 0, Z: 0}, 300)
 	assert.NotContains(t, visible, types.EntityID("b"))
 }
 
