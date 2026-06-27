@@ -2035,7 +2035,7 @@
 
 ### Task 11: Config files for distributed mode + integration tests
 
-**Files:** Modify `deploy/docker-compose/docker-compose.yml`, `configs/game-server.yml`, `configs/room-service.yml`, `configs/gateway.yml`. Create `test/integration/migration_test.go`.
+**Files:** Modify `deploy/docker-compose/docker-compose.yml`, `configs/game-server.yml`, `configs/room-service.yml`, `configs/gateway.yml`. Create `tests/integration/migration_test.go`.
 
 - [ ] **Step 1: Update docker-compose for multi-replica**
 
@@ -2089,7 +2089,7 @@ room:
 - [ ] **Step 4: Create migration integration test**
 
 ```go
-// test/integration/migration_test.go
+// tests/integration/migration_test.go
 package integration
 import "testing"
 
@@ -2101,7 +2101,7 @@ func TestZoneMigration(t *testing.T) {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add deploy/docker-compose/docker-compose.yml configs/game-server.yml configs/room-service.yml test/integration/migration_test.go
+git add deploy/docker-compose/docker-compose.yml configs/game-server.yml configs/room-service.yml tests/integration/migration_test.go
 git commit -m "feat: config files + test scaffold for distributed mode"
 ```
 

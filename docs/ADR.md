@@ -908,7 +908,7 @@ Infrastructure abstractions in pkg/storage (PostgreSQL/Redis adapters in subpack
 
 ```
 - Unit tests alongside source (pkg/xxx/xxx_test.go)
-- Integration tests in test/integration/
+- Integration tests in tests/integration/
 - Mock interfaces via GoMock or hand-written
 - Table-driven tests preferred
 ```
@@ -949,7 +949,7 @@ jobs:
   docker:
     run: docker build -f deploy/docker/gateway.Dockerfile -t gateway:$TAG .
   integration-test:
-    run: docker-compose -f deploy/docker-compose/docker-compose.yml up -d && go test ./test/integration/...
+    run: docker-compose -f deploy/docker-compose/docker-compose.yml up -d && go test ./tests/integration/...
 ```
 
 ---
@@ -959,7 +959,7 @@ jobs:
 | Type | Scope | Tool | Frequency |
 |------|-------|------|-----------|
 | **Unit** | Individual packages | `go test`, table-driven | Every commit |
-| **Integration** | Service + DB (PostgreSQL, Redis) | `test/integration/` with Testcontainers | Every PR |
+| **Integration** | Service + DB (PostgreSQL, Redis) | `tests/integration/` with Testcontainers | Every PR |
 | **Load** | Gateway + Game Server under load | k6 + custom WebSocket client | Per milestone |
 | **Chaos** | Network partitions, crash recovery | `test/chaos/` (gremlins or scripted) | Pre-release |
 | **Benchmark** | AOI queries, RPC serialization | `go test -bench=.` | Per commit (performance regression) |

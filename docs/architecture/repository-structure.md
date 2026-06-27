@@ -51,7 +51,7 @@ spatial-server/
 ├── scripts/                 # Development shell scripts
 │   ├── dev-up.sh
 │   └── dev-down.sh
-├── test/                    # Non-unit tests
+├── tests/                    # Non-unit tests
 │   └── integration/             # Integration tests (realtime flow)
 ├── tools/                   # Standalone tools
 │   └── client/                  # WebSocket test client
@@ -92,7 +92,7 @@ spatial-server/
 | `build/docker/` | Per-service Dockerfiles (`gateway`, `room-service`, `game-server`). |
 | `deploy/docker-compose/` | Docker Compose for local development. |
 | `scripts/` | Developer shell scripts (`dev-up.sh`, `dev-down.sh`). |
-| `test/integration/` | Integration tests beyond unit tests. |
+| `tests/integration/` | Integration tests beyond unit tests. |
 | `tools/client/` | Standalone WebSocket test client. |
 | `docs/` | Architecture, ADRs, standards, ops, testing, protocol documentation. |
 | `.github/` | GitHub Actions CI/CD workflows. |

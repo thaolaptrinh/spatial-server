@@ -86,4 +86,8 @@ demo:
 		sleep 3; \
 	done
 
+.PHONY: test-integration
+test-integration:
+	go test -tags=integration -count=1 -timeout=120s ./tests/integration/...
+
 .PHONY: docker-build demo

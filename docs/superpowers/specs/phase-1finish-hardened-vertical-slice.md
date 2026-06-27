@@ -10,7 +10,7 @@ Phase 1G delivered a demoable single-server vertical slice: `make demo` connects
 1. **State is volatile.** Room Service tracks zone ownership and the Game Server registry in in-memory maps (`pkg/room/room.go`). A restart loses every ownership assignment and every registered server — the platform cannot survive a single process restart.
 2. **The packet protocol deviates from its own ADR.** `pkg/protocol/protocol.go` encodes a 3-byte header (`flags + packetID`), but [ADR-010](../../adr/010-packet-protocol.md) mandates `version + packetID + msgType + flags + sequence`. Sequence numbers are required for reliable ordering and future delta compression.
 3. **No business API.** The `SpatialServerAPI` service (runtime lifecycle: create/destroy/list) is declared in `proto/spatialserver/v1/spatial_server_api.proto` but has no implementation. Runtimes cannot be created or inspected through the API surface.
-4. **No real integration tests.** `test/integration/realtime_test.go` is a `t.Skip()` placeholder; correctness is only verified by running `make demo` by hand.
+4. **No real integration tests.** `tests/integration/realtime_test.go` is a `t.Skip()` placeholder; correctness is only verified by running `make demo` by hand.
 5. **Config is duplicated.** All three service mains re-implement the same koanf bootstrap inline, despite `pkg/config.Config` existing for this purpose. Gateway-specific knobs (`gateway.ws_port`, `room_service.addr`) are not modeled in the shared struct.
 
 **Phase 1Finish closes these five gaps.** After this phase the vertical slice is durable, protocol-compliant, API-driven, integration-tested, and consistently configured — a defensible foundation for the Phase 2 realtime features and Phase 3 distributed scaling.
@@ -144,16 +144,16 @@ Extend `pkg/config.Config` so every service main calls `config.Load("configs/def
 
 ### 6. Testcontainers Integration Test
 
-Replace the `t.Skip()` in `test/integration/realtime_test.go` with a real end-to-end test.
+Replace the `t.Skip()` in `tests/integration/realtime_test.go` with a real end-to-end test.
 
-- **New file `test/integration/harness.go`**: Testcontainers helpers — `StartPostgres(t)` (runs `migration.Run` against the container DSN), `StartRedis(t)`, `StartService(t, name, cfg)` (builds the binary with `go build` and `exec.Command`s it with `SPATIAL_*` env, returning address + a `Cleanup` that sends SIGTERM and waits). One Postgres + one Redis container shared by the three services.
-- **Modify `test/integration/realtime_test.go`**: `TestEndToEnd_SpawnMoveDespawn` boots room-service → game-server → gateway in order, polls each `grpc_health_v1` / `/ready` until ready, then drives a `coder/websocket` client:
+- **New file `tests/integration/harness.go`**: Testcontainers helpers — `StartPostgres(t)` (runs `migration.Run` against the container DSN), `StartRedis(t)`, `StartService(t, name, cfg)` (builds the binary with `go build` and `exec.Command`s it with `SPATIAL_*` env, returning address + a `Cleanup` that sends SIGTERM and waits). One Postgres + one Redis container shared by the three services.
+- **Modify `tests/integration/realtime_test.go`**: `TestEndToEnd_SpawnMoveDespawn` boots room-service → game-server → gateway in order, polls each `grpc_health_v1` / `/ready` until ready, then drives a `coder/websocket` client:
   1. Mint a JWT (HS256, `dev-secret-key-change-in-production`) for `player_id=p1`, `runtime_id=r1`, `zone_id=z1`.
   2. Call `SpatialServerAPI.CreateRuntime({runtime_id: "r1", zone_count: 1, zone_size: 100})`.
   3. Dial `ws://gateway/ws?token=…`, assert the seeded NPC `EntitySpawn` arrives (8-byte header decodes cleanly).
   4. Send three `PositionUpdate(0x03)` frames with incrementing sequence numbers; assert an `EntityMove(0x06)` echoes back.
   5. Close the WS; assert `EntityDespawn(0x05)` is observed by a second observer client (or assert the Game Server `EntityCount()` decrements via a debug RPC).
-- Gate behind `//go:build integration` and `go test -tags=integration ./test/integration/...`. Add `testcontainers-go`, `testcontainers-go/postgres`, `testcontainers-go/redis` to `go.mod`.
+- Gate behind `//go:build integration` and `go test -tags=integration ./tests/integration/...`. Add `testcontainers-go`, `testcontainers-go/postgres`, `testcontainers-go/redis` to `go.mod`.
 
 ## Data Flow
 
@@ -203,14 +203,14 @@ Replace the `t.Skip()` in `test/integration/realtime_test.go` with a real end-to
 | `apps/room-service/main.go` | Modify — `config.Load`, inject repositories, register `SpatialServerAPI` |
 | `apps/game-server/main.go` | Modify — `config.Load`, updated protocol call sites |
 | `tools/client/main.go` | Modify — stamp/read sequence numbers on encode/decode |
-| `test/integration/harness.go` | Create — Testcontainers boot helpers |
-| `test/integration/realtime_test.go` | Modify — replace `t.Skip()` with full E2E test |
+| `tests/integration/harness.go` | Create — Testcontainers boot helpers |
+| `tests/integration/realtime_test.go` | Modify — replace `t.Skip()` with full E2E test |
 | `configs/defaults.yml` | Modify — add `gateway.max_packet_size`, conn limits, `drain_timeout` |
 | `configs/gateway.yml` | Modify — align with new `GatewayConfig` fields |
 | `configs/game-server.yml` | Modify — align with new `GameConfig` fields |
 | `configs/room-service.yml` | Modify — add `spatial_api` defaults |
 | `go.mod` / `go.sum` | Modify — add `testcontainers-go` (+ postgres, redis modules) |
-| `Makefile` | Modify — `make test-integration` target (`go test -tags=integration ./test/integration/...`) |
+| `Makefile` | Modify — `make test-integration` target (`go test -tags=integration ./tests/integration/...`) |
 
 ## References
 

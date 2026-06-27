@@ -24,7 +24,7 @@
 | `configs/gateway.yml` | Add `gateway.jwt_secret` | Modified |
 | `configs/defaults.yml` | Add `gateway.jwt_secret` default | Modified |
 | `go.mod` / `go.sum` | Add `github.com/coder/websocket` | Modified |
-| `test/integration/...` | End-to-end test across all services | Created |
+| `tests/integration/...` | End-to-end test across all services | Created |
 
 ---
 
@@ -1337,7 +1337,7 @@ git commit -m "feat: wire gateway WS ↔ game-server Relay stream pump"
 **Files:**
 - Modify: `configs/defaults.yml`
 - Modify: `configs/gateway.yml`
-- Create: `test/integration/realtime_test.go`
+- Create: `tests/integration/realtime_test.go`
 
 - [ ] **Step 1: Add config keys**
 
@@ -1358,7 +1358,7 @@ room_service:
 - [ ] **Step 2: Write end-to-end integration test**
 
 ```go
-// test/integration/realtime_test.go
+// tests/integration/realtime_test.go
 // +build integration
 
 package integration
@@ -1396,7 +1396,7 @@ This is a skeleton — real implementation depends on how services are composed.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add configs/ test/integration/
+git add configs/ tests/integration/
 git commit -m "chore: add gateway config keys, scaffold integration test"
 ```
 

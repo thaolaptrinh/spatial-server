@@ -77,7 +77,7 @@ jobs:
       - Build:      go build ./...
 ```
 
-There is **no** Docker build job and **no** integration-test job in CI. Dockerfiles exist at `build/docker/{gateway,room-service,game-server}.Dockerfile` for local/manual image builds. Integration tests live in `test/integration/` and run on-demand (require Docker for PostgreSQL/Redis).
+There is **no** Docker build job and **no** integration-test job in CI. Dockerfiles exist at `build/docker/{gateway,room-service,game-server}.Dockerfile` for local/manual image builds. Integration tests live in `tests/integration/` and run on-demand (require Docker for PostgreSQL/Redis).
 
 ## Tag Strategy
 

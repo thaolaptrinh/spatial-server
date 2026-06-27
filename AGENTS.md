@@ -34,7 +34,7 @@ go test ./pkg/room/... -v -run TestLookupZone
 go test ./pkg/entity/... -v -run "TestEntityID/GivenValidInput_ReturnsID"
 
 # Integration tests (requires Docker for PostgreSQL/Redis)
-go test ./test/integration/... -v -race
+go test ./tests/integration/... -v -race
 
 # Lint
 golangci-lint run ./...
@@ -150,7 +150,7 @@ Business Backend → Room Service → Runtime Instance → Zone → AOI → Enti
 
 Full details: `docs/testing/`. Quick reference:
 - Unit tests: alongside source, table-driven preferred
-- Integration tests: `test/integration/` with Testcontainers
+- Integration tests: `tests/integration/` with Testcontainers
 - Naming: `TestXxx` or `TestXxx_GivenY_WhenZ`
 - Mocks: GoMock or hand-written interfaces
 - CI gate: light load on every PR, full benchmark pre-release

@@ -709,22 +709,22 @@
 ### Task 7: Testcontainers integration test
 
 **Files:**
-- Create: `test/integration/harness.go`
-- Modify: `test/integration/realtime_test.go`
+- Create: `tests/integration/harness.go`
+- Modify: `tests/integration/realtime_test.go`
 - Modify: `Makefile`, `go.mod`
 
 - [ ] **Step 1: Add testcontainers deps**
 
   Run: `go get github.com/testcontainers/testcontainers-go@latest github.com/testcontainers/testcontainers-go/modules/postgres@latest github.com/testcontainers/testcontainers-go/modules/redis@latest`
 
-- [ ] **Step 2: Create `test/integration/harness.go`** (`//go:build integration`)
+- [ ] **Step 2: Create `tests/integration/harness.go`** (`//go:build integration`)
 
   `startStack(t)` runs `postgres:16-alpine` + `redis:7-alpine`, returns `{pgDSN, redisAddr, cleanup}` and runs `migration.Run` against the resolved migrations dir.
   `startService(t, name string, port int, extraEnv ...string)` builds `go build -o <tmp>/name ./apps/<name>`, starts it with `SPATIAL_POSTGRES__DSN`/`SPATIAL_REDIS__ADDR`/`SPATIAL_GRPC__PORT=<port>` + extra env (host `SPATIAL_*` env stripped), records `host`/`port` and registers a SIGTERM+Wait cleanup.
   `waitForGRPC(t, addr, timeout)` TCP-dials until reachable.
   `waitForHTTP(t, url, timeout)` GETs until 2xx.
 
-- [ ] **Step 3: Replace `test/integration/realtime_test.go`** (`//go:build integration`)
+- [ ] **Step 3: Replace `tests/integration/realtime_test.go`** (`//go:build integration`)
 
   `TestEndToEnd_SpawnMoveDespawn`:
   1. `s := startStack(t)`; boot room-service(:19000), game-server(:19001 with `SPATIAL_GRPC__HOST=127.0.0.1`), gateway(:18080 with `SPATIAL_GATEWAY__WS_PORT=18080` + `SPATIAL_ROOM_SERVICE__ADDR`); wait for each.
@@ -738,7 +738,7 @@
   ```makefile
   .PHONY: test-integration
   test-integration:
-  	go test -tags=integration -count=1 ./test/integration/...
+  	go test -tags=integration -count=1 ./tests/integration/...
   ```
 
 - [ ] **Step 5: Run + verify**
@@ -751,7 +751,7 @@
 - [ ] **Step 6: Commit**
 
   ```bash
-  git add test/integration/ go.mod go.sum Makefile
+  git add tests/integration/ go.mod go.sum Makefile
   git commit -m "test: real testcontainers E2E for spawn/move/despawn"
   ```
 

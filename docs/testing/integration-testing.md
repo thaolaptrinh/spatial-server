@@ -13,7 +13,7 @@ Integration tests validate real interactions between a service and its dependenc
 ## Directory Structure
 
 ```
-test/integration/
+tests/integration/
 ├── gateway/
 │   ├── gateway_test.go
 │   ├── connection_test.go
@@ -103,10 +103,10 @@ func TestMain(m *testing.M) {
 
 ```bash
 # Run all integration tests
-go test ./test/integration/... -v -tags=integration -timeout 300s
+go test ./tests/integration/... -v -tags=integration -timeout 300s
 
 # Single service
-go test ./test/integration/gateway/... -v -tags=integration
+go test ./tests/integration/gateway/... -v -tags=integration
 
 # Skip integration tests in normal unit runs
 go test ./internal/... -v  # integration tests excluded by build tag

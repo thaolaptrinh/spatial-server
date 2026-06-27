@@ -297,7 +297,7 @@ This satisfies ADR-021 readiness semantics and ADR-011 client-impact ("clients r
 | `proto/gen/spatialserver/v1/*.pb.go` | Regenerate | `make proto` |
 | `configs/gateway.yml` | Modify | Add `rate_limit.*`, `drain.timeout`, `session.ttl` keys |
 | `configs/game-server.yml` | Modify | Add `session.reconnect_window`, `delta_buffer.capacity` keys |
-| `test/integration/session_resume_test.go` | Create | E2E disconnect + reconnect + delta replay (Testcontainers Redis) |
+| `tests/integration/session_resume_test.go` | Create | E2E disconnect + reconnect + delta replay (Testcontainers Redis) |
 
 ## References
 

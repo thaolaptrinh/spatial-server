@@ -280,7 +280,7 @@ New file. The Room Service deployment goes from 1 replica to 2 (active/passive).
 | `deploy/docker-compose/docker-compose.yml` | Modify | Scale game-server to 2+, room-service to 2 replicas |
 | `configs/game-server.yml` | Modify | Add `game.cross_zone.enabled`, `game.ghost_ttl`, neighbor config |
 | `configs/room-service.yml` | Modify | Add `election.lease_name`, sweeper interval config |
-| `test/integration/migration_test.go` | Create | E2E zone migration + cross-zone AOI (Testcontainers) |
+| `tests/integration/migration_test.go` | Create | E2E zone migration + cross-zone AOI (Testcontainers) |
 
 ## References
 

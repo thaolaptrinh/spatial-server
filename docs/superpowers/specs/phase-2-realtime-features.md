@@ -216,7 +216,7 @@ type Lifecycle interface {
 | `configs/defaults.yml` | Modify — `metrics.port` per service, `game.snapshot_interval` |
 | `configs/game-server.yml` | Modify — `game.npcs` list (type/behavior/position/waypoints/radius) |
 | `go.mod` / `go.sum` | Modify — add `github.com/prometheus/client_golang` |
-| `test/integration/realtime_test.go` | Modify — extend E2E test: assert NPC moves, action round-trips, snapshot recovers |
+| `tests/integration/realtime_test.go` | Modify — extend E2E test: assert NPC moves, action round-trips, snapshot recovers |
 | `Makefile` | Modify — `make proto` already present; add `make bench` scaffold for tick benchmarks |
 
 ## References
