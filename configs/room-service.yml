@@ -18,5 +18,5 @@ redis:
   addr: "localhost:6379"
 
 room:
-  heartbeat_timeout: 30s
+  heartbeat_timeout: 15s
   heartbeat_interval: 5s

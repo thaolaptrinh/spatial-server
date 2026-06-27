@@ -8,6 +8,10 @@ Accepted
 
 Spatial Server handles realtime communication between clients. Security must protect against unauthorized access, data tampering, replay attacks, and resource exhaustion — without adding unnecessary latency to the realtime path.
 
+## Problem
+
+A realtime platform exposed directly to clients must defend against unauthorized access, data tampering, replay attacks, and resource exhaustion. Poorly chosen security primitives (e.g., per-packet signatures, token issuance inside the infrastructure) add latency to the hot path or couple the platform to business logic.
+
 ## Decision
 
 ### Authentication
@@ -64,13 +68,30 @@ Spatial Server handles realtime communication between clients. Security must pro
 - No credit card or PII data flows through Spatial Server (those are in Business Backend).
 - Audit logging: all Runtime lifecycle operations logged with player_id and runtime_id.
 
+## Alternatives
+
+1. **Spatial Server issues JWTs**: Have the infrastructure mint and manage auth tokens. Rejected because it couples the platform to business identity and forces Spatial Server to manage users (per [ADR-013](013-platform-boundary.md)).
+2. **Per-message MAC/signature**: Cryptographically sign every packet. Rejected because the per-packet verification cost is too high for a 20Hz realtime path; sequence-number replay protection plus TLS is sufficient.
+3. **mTLS on all internal traffic from day one**: Enforce mutual TLS between services immediately. Rejected for MVP because the deployment and certificate-management complexity outweighs the benefit on a private network; deferred to a future phase.
+
+## Tradeoffs
+
+- Stateless JWT validation is fast and horizontally scalable, but a compromised or revoked token remains valid until its `exp` (session revocation is addressed by [ADR-022](022-session-management.md)).
+- Edge rate limiting and replay protection add O(1) overhead per packet and 4 bytes for the sequence number, an acceptable cost for protection of downstream Game Servers.
+
 ## Consequences
 
 - Security model is simple: validate at Gateway edge, trust internal network.
-- No session management in Spatial Server (JWT stateless validation).
+- Session management is deferred — [ADR-022](022-session-management.md) defines Redis-backed session tokens with 30s reconnection. Until [ADR-022](022-session-management.md) is implemented, JWT validation is stateless with no session resumption.
 - Rate limiting adds minimal overhead (token bucket is O(1)).
 - Replay protection adds 4 bytes per packet (sequence number).
 - mTLS for internal communication is deferred to maintain deployment simplicity.
+
+## Future Considerations
+
+- mTLS for all internal (service ↔ service) gRPC traffic.
+- Token revocation and shorter session windows via [ADR-022](022-session-management.md) session tokens.
+- Per-player resource budgets beyond the shared rate limits.
 
 ## Replaces
 

@@ -141,7 +141,7 @@ Business Backend → Room Service → Runtime Instance → Zone → AOI → Enti
 |---------|------|------|
 | Gateway (gRPC) | WebSocket termination, auth, routing | 9000 |
 | Room Service (gRPC) | Zone ownership, coordinator | 9000 |
-| Game Server (gRPC) | Entity simulation, AOI | 9001 |
+| Game Server (gRPC) | Entity simulation, AOI | 9000 |
 | Gateway (client) | WSS | 443 |
 | PostgreSQL | Persistence | 5432 |
 | Redis | Cache, pub/sub | 6379 |

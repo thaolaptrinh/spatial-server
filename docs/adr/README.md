@@ -21,13 +21,13 @@ This directory contains Architecture Decision Records (ADRs) for the Spatial Ser
 | 011 | [Failure Recovery](011-failure-recovery.md) | Approved |
 | 012 | [Networking](012-networking.md) | Approved |
 | 013 | [Platform Boundary](013-platform-boundary.md) | Approved |
-| 014 | [Infrastructure Platform](014-infrastructure-platform.md) | Approved |
-| 015 | [Architecture Principles](015-architecture-principles.md) | Approved |
-| 016 | [Runtime Lifecycle](016-runtime-lifecycle.md) | Approved |
-| 017 | [Capacity Planning](017-capacity-planning.md) | Approved |
-| 018 | [Security](018-security.md) | Approved |
-| 019 | [Observability](019-observability.md) | Approved |
-| 020 | [Benchmark Strategy](020-benchmark-strategy.md) | Approved |
+| 014 | [Infrastructure Platform](014-infrastructure-platform.md) | Accepted |
+| 015 | [Architecture Principles](015-architecture-principles.md) | Accepted |
+| 016 | [Runtime Lifecycle](016-runtime-lifecycle.md) | Accepted |
+| 017 | [Capacity Planning](017-capacity-planning.md) | Accepted |
+| 018 | [Security](018-security.md) | Accepted |
+| 019 | [Observability](019-observability.md) | Accepted |
+| 020 | [Benchmark Strategy](020-benchmark-strategy.md) | Accepted |
 | 021 | [Gateway Architecture](021-gateway-architecture.md) | Accepted |
 | 022 | [Session Management](022-session-management.md) | Accepted |
 | 023 | [Entity Model](023-entity-model.md) | Accepted |

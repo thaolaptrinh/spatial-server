@@ -67,7 +67,7 @@ message GetRuntimeInfoRequest {
 
 message GetRuntimeInfoResponse {
   string runtime_id = 1;
-  string status = 2;           // active, draining, destroyed
+  RuntimeStatus status = 2;    // enum: CREATING, ACTIVE, DRAINING, DESTROYED
   int32 zone_count = 3;
   int32 player_count = 4;
   string created_at = 5;
@@ -101,20 +101,50 @@ message EntityID {
   string id = 1;  // UUIDv7
 }
 
+message ZoneID {
+  string id = 1;           // zone identifier
+  string runtime_id = 2;   // runtime the zone belongs to
+  int32 grid_x = 3;
+  int32 grid_y = 4;
+}
+
+message RuntimeID {
+  string id = 1;
+}
+
+message ServerID {
+  string id = 1;
+}
+
 message Vector3 {
   double x = 1;
   double y = 2;
   double z = 3;
 }
 
-message ZoneID {
-  string room_id = 1;
-  int32 grid_x = 2;
-  int32 grid_y = 3;
+// Enums shared across services (see common.proto for full definitions)
+enum RuntimeStatus {
+  RUNTIME_STATUS_UNSPECIFIED = 0;
+  RUNTIME_STATUS_CREATING = 1;
+  RUNTIME_STATUS_ACTIVE = 2;
+  RUNTIME_STATUS_DRAINING = 3;
+  RUNTIME_STATUS_DESTROYED = 4;
 }
 
-message ServerID {
-  string id = 1;
+enum ZoneStatus {
+  ZONE_STATUS_UNSPECIFIED = 0;
+  ZONE_STATUS_UNOWNED = 1;
+  ZONE_STATUS_ACTIVE = 2;
+  ZONE_STATUS_TRANSFERRING = 3;
+  ZONE_STATUS_ORPHAN = 4;
+}
+
+enum ServerStatus {
+  SERVER_STATUS_UNSPECIFIED = 0;
+  SERVER_STATUS_JOINING = 1;
+  SERVER_STATUS_ACTIVE = 2;
+  SERVER_STATUS_DRAINING = 3;
+  SERVER_STATUS_SHUTDOWN = 4;
 }
 
 // === room_service.proto ===
@@ -126,14 +156,20 @@ service RoomService {
   rpc PrepareShutdown(ServerID) returns (PrepareShutdownResponse);
 
   // Gateway → Room Service
-  rpc LookupZone(ZoneID) returns (LookupZoneResponse);
-  rpc LookupServer(ServerID) returns (LookupServerResponse);
+  rpc LookupZone(LookupZoneRequest) returns (LookupZoneResponse);
+  rpc LookupServer(LookupServerRequest) returns (LookupServerResponse);
   rpc ReportMetrics(ReportMetricsRequest) returns (ReportMetricsResponse);
 
-  // Room Service → Game Server (initiated by Room Service)
+  // Room Service → Game Server (control plane)
   rpc TransferZone(stream ZoneSnapshot) returns (TransferZoneResponse);
   rpc PrepareTransfer(PrepareTransferRequest) returns (PrepareTransferResponse);
 }
+
+// NOTE: TransferZone is a CONTROL-PLANE RPC. Room Service uses it to instruct a
+// server to accept ownership of a zone. The actual zone state (entities, AOI
+// index) flows via direct GameServer.ZoneStateSync (P2P, source → target),
+// NOT through RoomService.TransferZone. See ADR-002 for the data-plane flow.
+
 
 message RegisterRequest {
   string server_id = 1;
@@ -143,10 +179,38 @@ message RegisterRequest {
   map<string, string> metadata = 5;
 }
 
+message RegisterResponse {
+  bool success = 1;
+}
+
+message HeartbeatRequest {
+  string server_id = 1;
+  // NOTE: HeartbeatRequest has NO load field. It is a liveness signal only.
+  // Load reporting will be via the ReportMetrics RPC (not yet implemented).
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+}
+
+message LookupZoneRequest {
+  string zone_id = 1;
+}
+
 message LookupZoneResponse {
   ServerID server = 1;
   string host = 2;
   int32 port = 3;
+}
+
+message LookupServerRequest {
+  string server_id = 1;
+}
+
+message LookupServerResponse {
+  string host = 1;
+  int32 port = 2;
+  ServerStatus status = 3;
 }
 
 message ReportMetricsRequest {
@@ -168,12 +232,53 @@ service GameServer {
   rpc ReleaseZone(ReleaseZoneRequest) returns (ReleaseZoneResponse);
 
   // Game Server → Game Server (direct)
-  rpc MigrateEntity(EntitySnapshot) returns (MigrateEntityResponse);
+  rpc MigrateEntity(MigrateEntityRequest) returns (MigrateEntityResponse);
   rpc ZoneStateSync(stream ZoneSnapshot) returns (ZoneStateSyncResponse);
   rpc NotifyEntityEnter(EntityEnterLeave) returns (NotifyResponse);
   rpc NotifyEntityLeave(EntityEnterLeave) returns (NotifyResponse);
   rpc SendEntityUpdate(EntityUpdate) returns (Ack);
   rpc QueryEntities(QueryEntitiesRequest) returns (QueryEntitiesResponse);
+
+  // Gateway ↔ Game Server (client packet relay)
+  rpc Relay(stream RelayPacket) returns (stream RelayPacket);
+}
+
+// Relay envelope carried over the Gateway ↔ Game Server bidirectional stream.
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_DATA = 1;
+  KIND_CONNECT = 2;
+  KIND_DISCONNECT = 3;
+}
+
+message RelayPacket {
+  string      client_id = 1;
+  Kind        kind      = 2;
+  bytes       payload   = 3;
+  ConnectMeta meta      = 4;
+}
+
+message ConnectMeta {
+  string player_id  = 1;
+  string runtime_id = 2;
+  string zone_id    = 3;
+}
+
+message MigrateEntityRequest {
+  EntitySnapshot entity = 1;
+  string target_zone_id = 2;
+}
+
+message MigrateEntityResponse {
+  bool success = 1;
+}
+
+message ZoneStateSyncResponse {
+  bool success = 1;
+}
+
+message NotifyResponse {
+  bool acknowledged = 1;
 }
 
 message EntitySnapshot {
@@ -240,6 +345,10 @@ service Gateway {
 }
 ```
 
+> **Note:** Per [ADR-002](002-zone-migration.md), zone state flows via direct `GameServer.ZoneStateSync` (P2P, source → target), NOT through `RoomService.TransferZone`. `TransferZone` is a control-plane instruction only — Room Service directs a transfer, while the actual entity/AOI data is streamed directly between Game Servers.
+
+> **Note:** `HeartbeatRequest` carries only `server_id` (liveness signal). It has no load field. Load reporting will be via the `ReportMetrics` RPC (not yet implemented).
+
 ### RPC Properties
 
 | RPC | Timeout | Retry | Idempotent | Compression |
@@ -257,6 +366,7 @@ service Gateway {
 | PrepareShutdown | 5s | 1x | Yes | No |
 | SendEntityUpdate | 500ms | No (latest wins) | No | No |
 | QueryEntities | 1s | 1x | Yes | No |
+| Relay | stream (no timeout) | No | No | No |
 | CreateRuntime | 10s | 2x | Yes | No |
 | DestroyRuntime | 30s | 2x | Yes | No |
 | GetRuntimeInfo | 5s | 2x | Yes | No |

@@ -8,7 +8,7 @@ Accepted
 
 The Gateway is the entry point for all client connections to Spatial Server. Every WebSocket connection, every packet, and every authentication attempt flows through it. Its architecture directly affects connection handling capacity, auth security, rate limiting effectiveness, and routing correctness. The design must be stateless for horizontal scalability, must never block on backpressure, and must handle up to 10,000 concurrent connections per instance.
 
-Existing ADRs define what the Gateway must do (validate JWTs per ADR-018, enforce rate limits per ADR-018, proxy to Game Servers per ADR-016) but do not specify the Gateway's internal architecture — how it terminates WebSocket connections, how it validates auth before processing packets, how it routes packets to the correct Game Server, and how it remains stateless.
+Existing ADRs define what the Gateway must do (validate JWTs per [ADR-018](018-security.md), enforce rate limits per [ADR-018](018-security.md), proxy to Game Servers per [ADR-016](016-runtime-lifecycle.md)) but do not specify the Gateway's internal architecture — how it terminates WebSocket connections, how it validates auth before processing packets, how it routes packets to the correct Game Server, and how it remains stateless.
 
 ## Problem
 
@@ -37,7 +37,7 @@ Without a defined Gateway architecture, each implementation may make different c
 - Two token buckets per connection: one for auth attempts (10 failures/min), one for message throughput (100 msg/s).
 - One shared token bucket per source IP (500 msg/s).
 - Token bucket parameters are read from dynamic config on every refill — no restart required to change limits.
-- Rate limit violation handling follows ADR-018: drop → warn → disconnect after 3 violations.
+- Rate limit violation handling follows [ADR-018](018-security.md): drop → warn → disconnect after 3 violations.
 
 ### Packet Forwarding to Game Server via gRPC
 
@@ -93,7 +93,7 @@ Without a defined Gateway architecture, each implementation may make different c
 
 - Per-instance routing cache with push invalidation is simple and fast but means a brief inconsistency window (up to 5s TTL) if the push notification is lost. Acceptable because zone ownership changes are rare and clients reconnect on routing errors.
 - nhooyr.io/websocket has a smaller community than gorilla/websocket but is actively maintained and used in production by several projects.
-- Stateless design means clients must reconnect on Gateway failure. This is acceptable because reconnection is handled by the client SDK (see ADR-022 for session resumption).
+- Stateless design means clients must reconnect on Gateway failure. This is acceptable because reconnection is handled by the client SDK (see [ADR-022](022-session-management.md) for session resumption).
 - gRPC stream per connection adds memory overhead (~10 KB per stream) but avoids per-packet RPC overhead.
 
 ## Consequences

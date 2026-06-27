@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache: true
 
       - name: Install buf
@@ -26,16 +26,16 @@ jobs:
           version: latest
 
       - name: Format
-        run: go fmt ./internal/... ./pkg/...
+        run: go fmt ./internal/... ./pkg/... ./apps/...
 
       - name: Lint
-        run: golangci-lint run ./internal/... ./pkg/...
+        run: golangci-lint run ./internal/... ./pkg/... ./apps/...
 
       - name: Proto lint
         run: buf lint proto/
 
       - name: Test
-        run: go test ./internal/... ./pkg/... -v -race -count=1
+        run: go test ./internal/... ./pkg/... ./apps/... -v -race -count=1
 
       - name: Build
         run: go build ./...

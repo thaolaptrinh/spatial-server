@@ -56,13 +56,10 @@ var defaultServerOptions = []grpc.ServerOption{
         MinTime:             10 * time.Second,
         PermitWithoutStream: true,
     }),
-    grpc.ChainUnaryInterceptor(
-        metadataInterceptor,
-        loggingInterceptor,
-        recoveryInterceptor,
-    ),
 }
 ```
+
+> **Planned:** gRPC interceptors (recovery, logging, metrics) will be added in Phase 2 (Observability). Currently every service constructs its server with `grpc.NewServer()` and no interceptors — the chain below is the target design, not the current implementation.
 
 ## Timeouts
 
@@ -128,10 +125,10 @@ func isRetryable(err error) bool {
 
 ## Streaming Patterns
 
-### Server-Streaming (Zone Transfer)
+### Server-Streaming (Zone State Sync)
 
 ```protobuf
-rpc TransferZone(stream ZoneSnapshot) returns (TransferZoneResponse);
+rpc ZoneStateSync(stream ZoneSnapshot) returns (ZoneStateSyncResponse);
 ```
 
 - Source Game Server streams zone snapshot in chunks.
@@ -140,18 +137,28 @@ rpc TransferZone(stream ZoneSnapshot) returns (TransferZoneResponse);
 - If stream breaks, retry with exponential backoff (max 1 retry).
 - Compression: gzip enabled for streaming RPCs.
 
-### Client-Streaming and Bidirectional
+### Bidirectional Streaming (Relay)
 
-Avoid client-streaming and bidirectional streaming in Phase 1/2. Prefer:
+```protobuf
+rpc Relay(stream RelayPacket) returns (stream RelayPacket);
+```
+
+> **Exception:** The `GameServer.Relay` RPC uses bidirectional streaming for real-time packet relay between the Gateway and the Game Server. This is a deliberate design decision for the data-plane transport — it carries the low-latency client packet uplink and the entity-update downlink over a single long-lived stream. See ADR-009 and the `Relay` RPC definition in `game_server.proto`.
+
+Rules for Relay:
+
+- Exactly one stream per Gateway ↔ Game Server connection.
+- Uplink packets use `RelayPacket.kind` (`KIND_CONNECT`, `KIND_DATA`, `KIND_DISCONNECT`).
+- Downlink packets are `KIND_DATA` with the target `client_id`.
+- The stream is NOT retried per-packet; reconnect re-establishes from the Gateway side.
+
+### Client-Streaming
+
+Avoid client-streaming in Phase 1/2. Prefer:
 
 | Instead of | Use |
 |-----------|-----|
-| Bidirectional streaming | Pair of unary RPCs |
 | Client-streaming acknowledgments | Server-streaming with final ack |
-
-Exceptions allowed for:
-- Zone state transfer (server-streaming already approved)
-- Entity sync streams (approved, Phase 3+)
 
 ## Error Handling
 
@@ -216,7 +223,9 @@ if md, ok := metadata.FromIncomingContext(ctx); ok {
 
 ## Interceptor Stack
 
-Every service applies these interceptors:
+> **Planned:** No interceptors exist in the current implementation. Every service registers via `grpc.NewServer()` with no chained interceptors (see `apps/*/main.go`). The table below is the target design for Phase 2 (Observability).
+
+The planned interceptor order, once implemented:
 
 | Interceptor | Order | Purpose |
 |-------------|-------|---------|
@@ -227,6 +236,7 @@ Every service applies these interceptors:
 | Validation | 5th (innermost) | Validate request fields |
 
 ```go
+// Target shape — not yet implemented
 func loggingInterceptor(ctx context.Context, req interface{},
     info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
     start := time.Now()

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 ## Purpose
 
@@ -50,29 +50,34 @@ Terraform → cloud-init → Docker → K3s → Helm → Spatial Server Services
 ## CI/CD Pipeline
 
 ```
-┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐
-│   Lint   │ → │  Unit    │ → │  Build   │ → │  Docker  │ → │ Release │
-│ (golang- │   │  Test    │   │ (go build)│   │  Build   │   │ (tag)   │
-│  ci-lint)│   │          │   │          │   │          │   │         │
-└──────────┘   └──────────┘   └──────────┘   └──────────┘   └─────────┘
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│  Format  │ → │   Lint   │ → │  Proto   │ → │   Test   │ → │  Build   │
+│ (go fmt) │   │ (golang- │   │   Lint   │   │ (go test │   │ (go      │
+│          │   │ ci-lint) │   │ (buf)    │   │  -race)  │   │  build)  │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
 ```
 
 ### CI Config (GitHub Actions)
 
+The pipeline is a single `ci` job (see `.github/workflows/ci.yml`) running on every push/PR to `main`:
+
 ```yaml
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 jobs:
-  lint:
-    run: golangci-lint run ./...
-  unit-test:
-    run: go test ./pkg/... -race -coverprofile=coverage.out
-  build:
-    run: go build ./apps/...
-  docker:
-    run: docker build -f deploy/docker/gateway.Dockerfile -t gateway:$TAG .
-  integration-test:
-    run: docker compose -f deploy/docker-compose/docker-compose.yml up -d && go test ./test/integration/...
+  ci:
+    steps:
+      - Format:     go fmt ./internal/... ./pkg/...
+      - Lint:       golangci-lint run ./internal/... ./pkg/...
+      - Proto lint: buf lint proto/
+      - Test:       go test ./internal/... ./pkg/... -v -race -count=1
+      - Build:      go build ./...
 ```
+
+There is **no** Docker build job and **no** integration-test job in CI. Dockerfiles exist at `build/docker/{gateway,room-service,game-server}.Dockerfile` for local/manual image builds. Integration tests live in `test/integration/` and run on-demand (require Docker for PostgreSQL/Redis).
 
 ## Tag Strategy
 

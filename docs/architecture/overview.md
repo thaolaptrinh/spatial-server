@@ -13,7 +13,7 @@ Spatial Server is a realtime infrastructure platform. It does **not** contain bu
 ## Architecture Diagram
 
 ```mermaid
-flowchart TB
+graph TB
     subgraph External
         CL[Unity Clients<br/>Desktop / Mobile / WebGL]
     end

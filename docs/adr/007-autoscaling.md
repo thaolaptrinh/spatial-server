@@ -31,7 +31,7 @@ Manual capacity management is error-prone and wasteful. The platform needs autom
 3. New Game Server starts and registers (JOINING state).
 4. Room Service selects most loaded ACTIVE servers.
 5. Room Service picks zones to transfer (least loaded zones first).
-6. Zone migration executes (see ADR 002).
+6. Zone migration executes (see [ADR-002](002-zone-migration.md)).
 7. New server reaches ACTIVE state.
 
 ### Scale-Down Flow

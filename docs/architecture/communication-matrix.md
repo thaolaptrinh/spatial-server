@@ -14,7 +14,7 @@ Define every communication path in the Spatial Server system — transport, prot
 | Business Backend | Room Service | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Unidirectional (BB → RS) | On-demand | <500ms | Runtime lifecycle: CreateRuntime, DestroyRuntime, GetRuntimeInfo |
 | Gateway | Room Service | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Unidirectional (GW → RS) | Per-connection + cached | <10ms | Zone lookup: LookupZone, ReportMetrics |
 | Gateway | Game Server | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Bidirectional | Per-client session | <10ms | Client packet forwarding: WebSocket ↔ gRPC bridge |
-| Room Service | Game Server | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Bidirectional | 5s (heartbeat) | <5ms | Control plane: Register, Heartbeat, TransferZone, PrepareShutdown |
+| Game Server | Room Service | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Unidirectional (GS → RS) | 5s (heartbeat) | <5ms | Control plane: Register, Heartbeat, PrepareShutdown, TransferZone, PrepareTransfer |
 | Game Server | Game Server | gRPC (HTTP/2) | Protobuf (spatialserver.v1) | Bidirectional (P2P) | Event-driven | <5ms | Data plane: SendEntityUpdate, MigrateEntity, ZoneStateSync, QueryEntities |
 | Game Server | PostgreSQL | TCP :5432 | pgx (PostgreSQL wire) | Bidirectional | 5s (persistence) | <2ms | Zone state persistence, crash recovery reads |
 | Room Service | PostgreSQL | TCP :5432 | pgx (PostgreSQL wire) | Bidirectional | On change | <2ms | Zone ownership CRUD, Game Server registry |
@@ -39,7 +39,7 @@ Define every communication path in the Spatial Server system — transport, prot
 | Path | Criticality | Loss Tolerance | Notes |
 |------|-------------|----------------|-------|
 | Gateway ↔ Room Service | Medium | Cache covers outages | Zone lookups cached 5s TTL |
-| Room Service ↔ Game Server | Medium | Heartbeat timeout handles | Registration, heartbeat, transfer |
+| Room Service ↔ Game Server | Medium | Heartbeat timeout handles | Registration, heartbeat, transfer (RPCs called by GS on RS) |
 | Business Backend ↔ Room Service | Low | Retry on failure | Runtime create/destroy |
 
 ### Infrastructure Plane
@@ -54,10 +54,16 @@ Define every communication path in the Spatial Server system — transport, prot
 
 ```
 Public Network:     Client ↔ Gateway (WSS :443)
-Private Network:    All inter-service gRPC (:9000, :9001)
+Private Network:    All inter-service gRPC (:9000)
 Database Network:   PostgreSQL (:5432), Redis (:6379)
 Monitoring Network: Prometheus (:9090), Loki (:3100)
 ```
+
+> **Control-plane RPC direction:** `Register`, `Heartbeat`, `PrepareShutdown`, `TransferZone`, and `PrepareTransfer` are defined on `RoomService` and called **by Game Server on Room Service** (GS → RS). Data-plane zone state flows via `GameServer.ZoneStateSync` (P2P between Game Servers, per ADR-002).
+
+> **Gateway has no gRPC service.** The Gateway is a plain HTTP/WebSocket server. Client packet relay uses the `GameServer.Relay` bidi stream. The empty `Gateway` proto service is unused.
+
+> **Load reporting:** `Heartbeat` carries no load parameter. Load reporting will be via `ReportMetrics` RPC (planned).
 
 ## Key Design Rules
 

@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+Mermaid sequence diagrams capturing the key temporal flows across services: client connection, zone transfer, heartbeat/crash recovery, AOI updates, and service discovery.
+
 ## Client Connection Flow
 
 ```mermaid

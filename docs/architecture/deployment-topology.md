@@ -24,7 +24,7 @@ graph TB
     subgraph Network["spatial-dev-network"]
       GW[Gateway<br/>:8080 (WSS)]
       RS[Room Service<br/>:9000 (gRPC)]
-      GS[Game Server<br/>:9001 (gRPC)]
+      GS[Game Server<br/>:9000 (gRPC)]
       PG[(PostgreSQL<br/>:5432)]
       RD[(Redis<br/>:6379)]
     end
@@ -57,7 +57,7 @@ graph TB
 | PostgreSQL | Single instance, no replication |
 | Redis | Standalone, no persistence |
 | Room Service HA | Single instance, no leader election |
-| Game Server scaling | `docker compose scale game-server=N` |
+| Game Server scaling | `docker compose up --scale game-server=N` |
 
 ### Startup
 

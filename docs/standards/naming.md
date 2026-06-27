@@ -10,7 +10,7 @@ Define consistent naming conventions across all Go code, protobuf definitions, c
 
 | Convention | Rule | Good | Bad |
 |------------|------|------|-----|
-| Packages | lowercase, single word | `entity`, `space`, `zone` | `entity_manager`, `Entity` |
+| Packages | lowercase, single word | `entity`, `aoi`, `zone` | `entity_manager`, `Entity` |
 | Files | snake_case, matching package | `entity.go`, `entity_test.go` | `entity-manager.go`, `Entity.go` |
 | Exported types | PascalCase | `EntityID`, `ZoneManager` | `entityID`, `zone_manager` |
 | Unexported | camelCase | `zoneOwnership` | `ZoneOwnership` |
@@ -53,9 +53,9 @@ Define consistent naming conventions across all Go code, protobuf definitions, c
 
 | Element | Convention | Good | Bad |
 |---------|------------|------|-----|
-| YAML keys | lowercase, dot-separated | `storage.postgres.dsn` | `storage.postgres.DSN` |
-| Env vars | SPATIAL_ + UPPER_SNAKE_CASE | `SPATIAL_LOG_LEVEL` | `LOG_LEVEL`, `spatial_log_level` |
-| koanf struct tags | lowercase | `koanf:\"server.port\"` | `koanf:\"ServerPort\"` |
+| YAML keys | lowercase, dot-separated | `postgres.dsn`, `gateway.ws_port` | `postgres.DSN`, `Gateway.WsPort` |
+| Env vars | `SPATIAL_` prefix, `__` nesting separator | `SPATIAL_POSTGRES__DSN`, `SPATIAL_GRPC__PORT` | `POSTGRES_DSN`, `spatial_grpc_port` |
+| koanf struct tags | lowercase | `koanf:"grpc.port"` | `koanf:"GrpcPort"` |
 | Config file names | kebab-case | `game-server.yml` | `game_server.yml`, `GameServer.yml` |
 
 ## Infrastructure Naming

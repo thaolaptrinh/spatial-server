@@ -8,6 +8,10 @@ Accepted
 
 Spatial Server's performance targets (10K connections per Gateway, <100ms p95 latency, 5K entities per Game Server) must be validated before production deployment. Without a systematic benchmark strategy, performance regression can go undetected, and capacity planning is guesswork.
 
+## Problem
+
+Performance targets (10K connections per Gateway, <100ms p95 latency, 5K entities per Game Server) are unverified. Without a systematic, repeatable benchmark strategy, performance regressions go undetected in CI and capacity targets in [ADR-017](017-capacity-planning.md) remain assumptions rather than measured facts.
+
 ## Decision
 
 ### Dedicated Simulation Framework
@@ -83,6 +87,16 @@ Reports are stored in `benchmarks/reports/` with timestamped filenames.
 | Prometheus + Grafana | Real-time metrics during benchmark runs |
 | `go test -bench` | Micro-benchmarks (AOI, serialization) |
 
+## Alternatives
+
+1. **Production-only load testing**: Validate performance under real traffic after release. Rejected because it is risky, provides no CI gate, and exposes regressions to real players.
+2. **Third-party load-testing SaaS**: Use a hosted load generator. Rejected because realtime WebSocket movement/AOI patterns are hard to script generically, and it adds recurring cost and an external dependency.
+
+## Tradeoffs
+
+- A custom Go simulation framework is significant upfront work but is tailored to the platform's realtime/AOI patterns and doubles as an integration test harness.
+- A CI benchmark gate catches regressions before merge but adds CI runtime; only a light scenario runs per PR, with full scenarios reserved for pre-release.
+
 ## Consequences
 
 - No production deployment without passing benchmarks.
@@ -90,6 +104,11 @@ Reports are stored in `benchmarks/reports/` with timestamped filenames.
 - CI benchmark gate catches regressions before they reach staging.
 - Performance targets are validated, not assumed.
 - Simulation framework doubles as integration test framework.
+
+## Future Considerations
+
+- Continuous long-running soak tests to detect memory leaks and sustained-load degradation.
+- Chaos-injected benchmarks (forced Game Server crash mid-load) to validate recovery under stress.
 
 ## Replaces
 

@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+High-level C4-style system context showing Spatial Server as a black-box platform bounded by its external actors (clients, Business Backend, monitoring stack, external services) and the public/private network boundaries between them.
+
 ```mermaid
 graph TB
     subgraph "External Actors"
@@ -43,9 +47,9 @@ graph TB
     BB -->|Issue JWT Tokens| C4
 
     GW -->|gRPC :9000| RS
-    GW -->|gRPC :9001| GS
+    GW -->|gRPC :9000| GS
     RS -->|gRPC :9000| GS
-    GS <-->|gRPC P2P :9001| GS
+    GS <-->|gRPC P2P :9000| GS
 
     GS -->|:5432| PG
     RS -->|:5432| PG

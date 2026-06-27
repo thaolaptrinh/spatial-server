@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+The runtime state machine (`creating → active → draining → destroyed`) and the per-phase swimlane of interactions between Business Backend, Room Service, Game Server, Gateway, and PostgreSQL.
+
 ## Runtime State Machine
 
 ```mermaid

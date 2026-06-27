@@ -10,6 +10,10 @@ Spatial Server started with a design that included business concepts: users, roo
 
 The team recognized that Spatial Server should be a **reusable realtime infrastructure platform**, not a business backend. Each application has its own backend for business logic.
 
+## Problem
+
+Embedding business concepts (users, rooms, products, meetings) directly into Spatial Server tightly coupled the realtime infrastructure to application-specific logic. Each new application required changes to Spatial Server's schema and APIs, preventing reuse across Showroom, Meeting, Event, and Digital Twin use cases.
+
 ## Decision
 
 ### Core Principle
@@ -104,6 +108,16 @@ service SpatialServerAPI {
 - Spatial Server is stateless with respect to business logic — no caching of business data.
 - Spatial Server can serve multiple Business Backends simultaneously.
 
+## Alternatives
+
+1. **Keep business logic in Spatial Server**: Maintain users/rooms/products tables and APIs in the infrastructure layer. Rejected because it prevents reuse across applications and forces a schema change for every new use case.
+2. **Plugin/extension system**: Allow Business Backends to inject logic into Spatial Server via plugins. Rejected because it blurs the boundary, complicates deployment, and couples runtime versioning across applications.
+
+## Tradeoffs
+
+- A clean boundary makes Spatial Server reusable but shifts auth, room metadata, and lifecycle coordination entirely to Business Backends, adding a gRPC integration cost.
+- Minimal internal schema simplifies operations but means Spatial Server cannot answer business queries on its own.
+
 ## Consequences
 
 - Spatial Server is now **completely reusable** across applications.
@@ -112,6 +126,11 @@ service SpatialServerAPI {
 - Database schema is minimal (only infrastructure metadata).
 - New business applications don't require Spatial Server changes.
 - Engineering rule: "Is this business logic or realtime infrastructure?" must be asked for every new feature.
+
+## Future Considerations
+
+- Multi-tenant Business Backends sharing a single Spatial Server deployment.
+- Generated SDKs in common languages to accelerate Business Backend integration against the `SpatialServerAPI`.
 
 ## Replaces
 

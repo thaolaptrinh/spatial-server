@@ -14,6 +14,8 @@ The deployment strategy must support local development, staging/CI, and producti
 
 ## Decision
 
+> **Note:** [ADR-014](014-infrastructure-platform.md) supersedes the Helm portion of this decision. Helm charts ARE required per [ADR-014](014-infrastructure-platform.md). The "no Helm for MVP" stance below is superseded.
+
 ### Development (Local)
 
 - Single machine, no containerization.

@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+Component-level view of Spatial Server's internal services (Gateway, Room Service, Game Servers) and data stores (PostgreSQL, Redis), showing responsibilities and the gRPC/read-write edges between them.
+
 ```mermaid
 graph TB
     subgraph "Public Network"

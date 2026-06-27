@@ -8,6 +8,10 @@ Accepted
 
 Spatial Server is designed as a production-ready distributed realtime platform. Infrastructure must be: production ready, Infrastructure as Code, cloud agnostic, horizontally scalable, reproducible, low complexity, and easy for local development. Infrastructure decisions must be finalized before implementation begins.
 
+## Problem
+
+Without reproducible, cloud-agnostic infrastructure, deployments rely on manual setup that is error-prone, not horizontally scalable, and hard to reproduce across environments. The platform needs a baseline stack that is production-ready from day one without locking into a single cloud provider.
+
 ## Decision
 
 ### Stack
@@ -69,6 +73,16 @@ infra/
 - OpenTelemetry is the standard tracing solution.
 - Cloud agnostic — no business logic depends on a specific cloud provider.
 
+## Alternatives
+
+1. **Managed Kubernetes (EKS/GKE/AKS)**: Use a cloud-managed control plane for less operational burden. Rejected for the baseline because it introduces vendor lock-in and higher cost for a small team, though it remains an option for specific deployments.
+2. **Bare metal + Ansible only**: Provision and configure servers with Ansible, no container orchestrator. Rejected because it lacks declarative container orchestration, self-healing, and the reproducibility of Terraform + K3s.
+
+## Tradeoffs
+
+- K3s + Terraform + Helm is a broad stack to learn but is fully cloud-agnostic and reproducible from source.
+- Keeping `infra/` in the monorepo for Phases 1-3 simplifies coordination now but may need to split into its own repository as the team and deployment surface grow.
+
 ## Consequences
 
 - Phase 1 must include Helm charts alongside Docker Compose.
@@ -76,6 +90,12 @@ infra/
 - No etcd, Consul, or external service discovery — K3s built-in Services suffice.
 - Cluster Autoscaler is future consideration, not Phase 1.
 - infra/ directory lives in the same repository (monorepo) for Phase 1-3.
+
+## Future Considerations
+
+- Cluster Autoscaler for dynamic node provisioning (deferred beyond Phase 1).
+- Splitting `infra/` into a dedicated repository and adopting GitOps (ArgoCD/Flux) for multi-environment promotion.
+- Multi-region deployments for disaster recovery.
 
 ## Replaces
 

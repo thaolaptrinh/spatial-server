@@ -1,6 +1,6 @@
 # Scaling Guide
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 ## Purpose
 
@@ -29,7 +29,7 @@ Horizontal scaling first, vertical scaling only when horizontal is infeasible. S
 
 **How to scale:**
 - K3s: HPA with custom metric `websocket_connections` (Prometheus adapter).
-- Docker Compose: `docker compose scale gateway=N`.
+- Docker Compose: `docker compose up --scale gateway=N`.
 - Room Service discovers new Gateway via service registration.
 - No session affinity needed — clients reconnect to any Gateway via session token.
 
@@ -155,19 +155,27 @@ Verify capacity assumptions regularly via benchmarks (see [ADR-020](../adr/020-b
 
 ### Verification Procedure
 
+> **Load testing infrastructure is planned (Phase 6).** Currently no load tests, benchmark suites, or
+> seed SQL exist — the paths below (`test/load/...`, `test/bench/...`) do not exist yet and represent
+> the target layout. Redis memory checks (`redis-cli`) are available today against a running instance.
+
 ```bash
-# Gateway connection test (staging)
+# Gateway connection test (target, staging) — k6 script not yet present
 k6 run test/load/gateway-connections.js \
   --vus 10000 --duration 5m
 
-# Game Server entity benchmark
+# Game Server entity benchmark (target) — benchmark not yet present
 go test ./test/bench/... -bench=BenchmarkEntityThroughput \
   -benchtime=5x
 
-# PostgreSQL write benchmark
+# PostgreSQL write benchmark (target) — seed script not yet present
 pgbench -h localhost -U spatial -d spatialdb \
   -f test/load/zone-ownership.sql \
   -c 20 -T 300
+
+# Redis memory usage (available now)
+redis-cli -h localhost -p 6379 INFO memory
+redis-cli -h localhost -p 6379 MEMORY STATS
 ```
 
 If benchmarks show capacity below targets defined in [ADR-017](../adr/017-capacity-planning.md), investigate bottlenecks before deploying to production.

@@ -9,26 +9,20 @@ Describes how Spatial Server fits into the larger ecosystem — the external act
 ## System Context Diagram
 
 ```mermaid
-C4Context
-  title System Context — Spatial Server
+graph TB
+  CL[Client Application<br/>Web/mobile/desktop app with 3D rendering]
+  OP[Operator<br/>Admin managing the platform]
+  BB[Business Backend<br/>Owns auth, users, rooms, REST API]
+  SPATIAL["Spatial Server<br/>Realtime infrastructure — zones, entities, AOI"]
+  IDP[Identity Provider<br/>Optional: OIDC provider for JWT signing]
+  MON[Monitoring Stack<br/>Prometheus, Grafana, Loki, Alertmanager]
 
-  Person(client, "Client Application", "Web/mobile/desktop app with 3D rendering")
-  Person(operator, "Operator", "Admin managing the platform")
+  CL -- "WebSocket (WSS): JWT + binary protobuf packets" --> SPATIAL
+  BB -- "gRPC: CreateRuntime / DestroyRuntime / GetRuntimeInfo" --> SPATIAL
+  SPATIAL -- "JWT public key: Token validation" --> BB
 
-  System_Ext(bb, "Business Backend", "Owns auth, users, rooms, REST API")
-  System(spatial, "Spatial Server", "Realtime infrastructure — zones, entities, AOI")
-
-  System_Ext(idp, "Identity Provider", "Optional: OIDC provider for JWT signing")
-  System_Ext(monitoring, "Monitoring Stack", "Prometheus, Grafana, Loki, Alertmanager")
-
-  Rel(client, spatial, "WebSocket (WSS)", "JWT + binary protobuf packets")
-  Rel(bb, spatial, "gRPC", "CreateRuntime / DestroyRuntime / GetRuntimeInfo")
-  Rel(spatial, bb, "JWT public key", "Token validation")
-
-  Rel(operator, spatial, "kubectl / SSH", "Debugging only")
-  Rel(spatial, monitoring, "Prometheus metrics + structured logs", "Push")
-
-  UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+  OP -- "kubectl / SSH: Debugging only" --> SPATIAL
+  SPATIAL -- "Prometheus metrics + structured logs: Push" --> MON
 ```
 
 ## Actors

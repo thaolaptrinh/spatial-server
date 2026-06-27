@@ -8,6 +8,10 @@ Accepted
 
 A distributed realtime platform requires observability across all services to detect issues, diagnose failures, and measure performance. Without a standardized observability stack, each service would use different tools and formats, making cross-service debugging impossible.
 
+## Problem
+
+A distributed realtime platform spans Gateway, Room Service, and Game Servers. Without a standardized observability stack, each service would emit logs and metrics in different formats, making it impossible to correlate a single player's request across services or to diagnose cross-service failures and performance regressions.
+
 ## Decision
 
 ### Stack
@@ -89,6 +93,16 @@ Pre-built dashboard panels:
 | LowDisk | Disk usage > 85% | warning |
 | ConnectionSaturation | Gateway connections > 8,000 | warning |
 
+## Alternatives
+
+1. **Commercial APM (Datadog, New Relic)**: Use a managed all-in-one observability SaaS. Rejected because of cost and vendor lock-in for a cloud-agnostic platform (per [ADR-014](014-infrastructure-platform.md)).
+2. **Per-service ad-hoc logging**: Let each service choose its own logging/metrics format. Rejected because there is no shared `trace_id` correlation and no unified dashboards, defeating cross-service debugging.
+
+## Tradeoffs
+
+- A self-hosted CNCF stack (Prometheus + Grafana + Loki + OpenTelemetry) is free and cloud-agnostic but requires operational effort to run and upgrade.
+- 1% production trace sampling keeps overhead low but may miss rare events; sampling is configurable and can be raised for incident debugging.
+
 ## Consequences
 
 - Prometheus + Grafana + Loki + OpenTelemetry is the standard — all services must integrate.
@@ -96,6 +110,12 @@ Pre-built dashboard panels:
 - Tracing adds minimal overhead (1% sampling for production).
 - Dashboards are pre-built, not created ad-hoc.
 - Observability is mandatory — no service can skip metrics or structured logging.
+
+## Future Considerations
+
+- Higher, dynamically adjustable trace sampling during incidents.
+- SLO/SLI automation and log-based alerting on top of the existing metrics alerts.
+- Long-term metric retention and capacity-trend analysis.
 
 ## Replaces
 

@@ -1,6 +1,6 @@
 # Metrics Standards
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 ## Purpose
 
@@ -109,7 +109,9 @@ Every metric MUST include these labels:
 
 ## Metric Registration
 
-All metrics are registered in a central `pkg/metrics` package:
+> **Planned:** No `pkg/metrics` package exists yet and no service exposes a `/metrics` endpoint. Metrics are Phase 2 (Observability) work. The target design is a central `pkg/metrics` package as shown below; see ADR-019.
+
+Target `pkg/metrics` package:
 
 ```go
 package metrics
@@ -130,10 +132,10 @@ var (
 )
 ```
 
-Services register all metrics at startup and expose via `/metrics` endpoint.
+When implemented, services will register all metrics at startup and expose them via a `/metrics` endpoint.
 
 ## References
 
 - [ADR-019](../adr/019-observability.md) — Observability (Prometheus stack)
 - [ADR-017](../adr/017-capacity-planning.md) — Capacity Planning (scaling thresholds)
-- [Coding Standards](coding.md) — Package dependency rules for `pkg/metrics`
+- [Coding Standards](coding.md) — Package dependency rules

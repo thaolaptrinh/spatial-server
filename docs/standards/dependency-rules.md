@@ -42,23 +42,19 @@ Types and utilities not importable outside the module. May only import standard 
 
 | Package | Allowed Dependencies | Notes |
 |---------|---------------------|-------|
-| `apps/*` | all `pkg/*`, google gRPC, slog, koanf | Entry points — wire everything |
+| `apps/*` | all `pkg/*`, google gRPC, koanf, slog | Entry points — wire everything |
 | `pkg/entity/` | `internal/types/`, standard library only | Pure model — no infrastructure |
 | `pkg/aoi/` | `internal/types/`, standard library only | In-memory spatial index |
-| `pkg/game/` | google gRPC, pkg/entity, pkg/space, pkg/aoi, pkg/protocol | Game loop — depends on multiple pkg/ |
-| `pkg/gateway/` | nhooyr.io/websocket, pkg/protocol, pkg/auth | WebSocket — external dependency |
-| `pkg/room/` | google gRPC, pkg/cluster, pgx | Room Service logic |
-| `pkg/storage/` | pgx, go-redis, standard library | Database abstractions |
-| `pkg/rpc/` | google gRPC, standard library | gRPC helpers |
-| `pkg/config/` | koanf, standard library | Configuration loading |
-| `pkg/logging/` | slog, standard library | Logging setup |
-| `pkg/metrics/` | prometheus/client_golang, standard library | Metrics registration |
-| `pkg/session/` | standard library, pkg/auth | Session management |
-| `pkg/cluster/` | google gRPC, standard library | Cluster membership |
-| `pkg/space/` | internal/types/, standard library | Space/room model |
-| `pkg/zone/` | internal/types/, standard library | Zone management |
-| `pkg/protocol/` | protobuf, standard library | Binary packet protocol |
-| `pkg/auth/` | standard library (crypto, JWT) | JWT generation/validation |
+| `pkg/zone/` | `internal/types/`, standard library only | Zone management |
+| `pkg/game/` | `internal/types/`, `pkg/entity`, `pkg/aoi`, `pkg/protocol`, `pkg/zone`, `google.golang.org/protobuf/proto`, proto gen | Game loop — depends on multiple `pkg/` |
+| `pkg/gateway/` | `github.com/coder/websocket`, `pkg/auth`, `pkg/session`, `internal/types/`, proto gen | WebSocket — external dependency |
+| `pkg/room/` | `internal/types/`, standard library only | Room Service logic (persistence wired at `apps/`) |
+| `pkg/storage/` | `github.com/jackc/pgx/v5`, `github.com/redis/go-redis/v9`, standard library | Database abstractions |
+| `pkg/config/` | `github.com/knadh/koanf/v2` (+ providers/parsers), standard library | Configuration loading (exists; apps currently read koanf directly) |
+| `pkg/logging/` | `log/slog`, standard library | Logging setup |
+| `pkg/session/` | standard library, `pkg/auth` | Session management |
+| `pkg/protocol/` | `google.golang.org/protobuf/proto`, standard library | Binary packet protocol |
+| `pkg/auth/` | `github.com/golang-jwt/jwt/v5`, standard library (crypto) | JWT generation/validation |
 
 ## Enforcement
 

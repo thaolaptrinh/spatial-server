@@ -1,6 +1,6 @@
 # Operations Runbook
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 ## Purpose
 
@@ -8,11 +8,20 @@ Standard operating procedures for running Spatial Server in production.
 
 ## Monitoring
 
+### Health Endpoints
+
+**Gateway (HTTP):**
+- `GET /health` — returns `{"status":"ok"}` (always 200, does NOT check dependencies)
+- `/ready` and `/live` — **planned, not yet implemented**
+
+**Room Service & Game Server (gRPC):**
+- `grpc_health_v1.HealthCheckRequest` — both services register the gRPC health service
+- Use `grpc_health_probe` or `grpcurl` to check: `grpc_health_probe -addr=localhost:9000`
+
+### Heartbeats
+
 | Check | Endpoint | Interval | Failure Action |
 |-------|----------|----------|----------------|
-| **Health** | `/health` (returns 200) | 10s | Remove from LB, emit alert |
-| **Readiness** | `/ready` (returns 200 when fully operational) | 10s | Remove from LB |
-| **Liveness** | `/live` (returns 200 when process is alive) | 30s | Restart container |
 | **Heartbeat** | Game Server → Room Service (gRPC) | 5s | Zone reassignment after 3 missed |
 | **Heartbeat** | Room Service → Game Server (ping) | 10s | Detect zone ownership staleness |
 

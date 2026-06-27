@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+The gRPC communication graph between Gateway, Room Service, and Game Servers, including per-RPC type, timeout, retry policy, and the backoff strategy for retriable calls.
+
 ## RPC Architecture
 
 ```mermaid
@@ -87,7 +91,7 @@ graph TB
 ## Retry and Backoff Strategy
 
 ```mermaid
-flowchart LR
+graph LR
     A[RPC Call] --> B{Error?}
     B -->|No| C[Success]
     B -->|Transient Error| D{Retries left?}

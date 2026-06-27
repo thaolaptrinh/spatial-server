@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+How zones are mapped to Game Servers, the ownership table that tracks zone→server assignments (in-memory + PostgreSQL), and the claim/transfer/release/conflict-resolution operations that keep ownership consistent.
+
 ## Zone Ownership Architecture
 
 ```mermaid
@@ -23,7 +27,7 @@ graph TB
 
     subgraph "Room Service"
         RS[Room Service<br/>Ownership Table<br/>in-memory + PostgreSQL]
-        OT[Ownership Table<br/>zone_id → server_id<br/>heartbeat_expires<br/>status: ACTIVE|TRANSFERRING|ORPHAN]
+        OT["Ownership Table<br/>zone_id → server_id<br/>heartbeat_expires<br/>status: ACTIVE|TRANSFERRING|ORPHAN"]
     end
 
     subgraph "PostgreSQL"

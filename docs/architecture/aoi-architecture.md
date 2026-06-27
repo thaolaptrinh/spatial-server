@@ -141,7 +141,7 @@ sequenceDiagram
 ## AOI Update Flow
 
 ```mermaid
-flowchart LR
+graph LR
   subgraph Tick["Game Loop Tick (50ms)"]
     A[Receive inputs] --> B[Apply movements]
     B --> C[Update AOI index]
@@ -253,7 +253,7 @@ When Room Service initiates a zone transfer (load balancing, scale-down):
    - Re-establish cross-zone subscriptions with adjacent servers
    - Notify peers: "I now own zone Z, send enter/leave notifications"
 6. Target begins simulation, un-pauses AOI updates
-7. Target confirms ownership → Room Service updates zone_ownership
+7. Target confirms ownership → Room Service updates zones
 8. Gateway routing table refreshed
 9. Source releases zone resources
 ```

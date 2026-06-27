@@ -31,8 +31,8 @@ graph TB
   GW -- "gRPC proxy (game data)" --> GS1
   GW -- "gRPC proxy (game data)" --> GS2
 
-  RS -- "gRPC TransferZone/PrepareShutdown" --> GS1
-  RS -- "gRPC TransferZone/PrepareShutdown" --> GS2
+  GS1 -- "gRPC TransferZone/PrepareShutdown" --> RS
+  GS2 -- "gRPC TransferZone/PrepareShutdown" --> RS
 
   GS1 -- "gRPC direct P2P" --> GS2
   GS2 -- "gRPC direct P2P" --> GS1
@@ -46,6 +46,10 @@ graph TB
   GS1 -. "go-redis" .-> RD
   GS2 -. "go-redis" .-> RD
 ```
+
+> **Control-plane RPC direction:** `TransferZone`, `PrepareShutdown`, `PrepareTransfer`, `Register`, and `Heartbeat` are defined on `RoomService` and called **by Game Server on Room Service**. Data-plane zone state flows via `GameServer.ZoneStateSync` (P2P per ADR-002).
+
+> **Gateway has no gRPC service.** The Gateway is a plain HTTP/WebSocket server. Client packet relay uses the `GameServer.Relay` bidi stream. The empty `Gateway` proto service is unused.
 
 ## Gateway
 
@@ -166,7 +170,7 @@ Core simulation engine that owns zones, runs the game loop, maintains entity sta
 - Broadcast entity state updates to interested clients (within interest radius)
 - Handle direct P2P gRPC calls from peer Game Servers (entity migration, zone state sync)
 - Persist zone state to PostgreSQL periodically (default 5s interval)
-- Register with Room Service on startup and send heartbeats every 5s
+- Register with Room Service on startup and send heartbeats every 5s (no load parameter; load reporting will be via `ReportMetrics` RPC, planned)
 - Accept and execute zone transfer commands from Room Service (source/target roles)
 - Handle player join (create entity, add to AOI) and leave (remove entity, broadcast despawn)
 - Enforce per-zone entity capacity (default 100 entities)
@@ -219,7 +223,7 @@ Operational source of truth for all metadata — zone ownership, Game Server reg
 
 | Table | Description | Write Pattern |
 |-------|-------------|--------------|
-| `zone_ownership` | zone_id → server_id mapping with status and heartbeat | Room Service (exclusive writer) |
+| `zones` | zone_id → server_id mapping with status and size | Room Service (exclusive writer) |
 | `game_servers` | Game Server registry (address, capacity, load, joined_at) | Room Service |
 | `runtimes` | Runtime metadata (status, zone count, timestamps) | Room Service |
 | `zone_state` | Serialized zone snapshots for crash recovery | Game Servers (periodic, 5s) |

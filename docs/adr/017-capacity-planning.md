@@ -8,6 +8,10 @@ Accepted
 
 Spatial Server must define capacity targets per service to guide infrastructure sizing, autoscaling thresholds, and hardware provisioning. Without defined limits, it is impossible to distinguish normal operation from capacity incidents.
 
+## Problem
+
+Without concrete per-service capacity targets and scaling thresholds, autoscaling rules and hardware provisioning are guesswork. Operators cannot tell normal load from a capacity incident, and there is no baseline against which to measure regressions.
+
 ## Decision
 
 ### Per-Node Baseline
@@ -73,6 +77,16 @@ This baseline is for a single K3s node hosting multiple services. It is the mini
 | PostgreSQL connections | >40 (80% of pool) | Add PgBouncer or increase pool |
 | Redis memory | >80% of maxmemory | Scale up or enable eviction |
 
+## Alternatives
+
+1. **No targets, scale reactively on alerts**: Add capacity only when services are already degraded. Rejected because it provides no baselines for planning and reacts too late to avoid player-visible impact.
+2. **Generous over-provisioning**: Provision far above expected peak load. Rejected as wasteful and costly, especially on a constrained 2 vCPU / 4 GB baseline.
+
+## Tradeoffs
+
+- Conservative scaling thresholds (e.g., 70% CPU) act early and reduce risk of saturation but may over-provision during brief, harmless spikes.
+- All targets are estimates derived from architecture rather than measurement; they must be validated and revised by the Phase 2/3 benchmarks ([ADR-020](020-benchmark-strategy.md)).
+
 ## Consequences
 
 - Hardware baseline of 2 vCPU / 4 GB RAM constrains initial deployment.
@@ -80,6 +94,11 @@ This baseline is for a single K3s node hosting multiple services. It is the mini
 - Game Server at 5,000 entities across 50 zones before needing another replica.
 - Scaling thresholds are deliberately conservative (70% CPU triggers action, not 90%).
 - These are estimates — benchmarks in Phase 2/3 will validate or revise them.
+
+## Future Considerations
+
+- Benchmark-driven revision of every target once Phase 2/3 load tests complete.
+- Predictive scaling and per-runtime capacity quotas to bound noisy-neighbor impact.
 
 ## Replaces
 

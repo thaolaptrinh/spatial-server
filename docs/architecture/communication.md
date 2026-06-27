@@ -9,7 +9,7 @@ Defines the communication paths between all actors in the Spatial Server system 
 ## Communication Diagram
 
 ```mermaid
-flowchart TB
+graph TB
   subgraph External
     CL[Client Application]
     BB[Business Backend]
@@ -28,11 +28,11 @@ flowchart TB
   BB -- "gRPC CreateRuntime/DestroyRuntime" --> RS
 
   GW -- "gRPC LookupZone" --> RS
-  GW -- "gRPC direct (game data)" --> GS1
-  GW -- "gRPC direct (game data)" --> GS2
+  GW -- "gRPC Relay (game data)" --> GS1
+  GW -- "gRPC Relay (game data)" --> GS2
 
-  RS -- "gRPC TransferZone" --> GS1
-  RS -- "gRPC PrepareShutdown" --> GS2
+  GS1 -- "gRPC TransferZone/PrepareShutdown" --> RS
+  GS2 -- "gRPC TransferZone/PrepareShutdown" --> RS
 
   GS1 -- "gRPC direct P2P (entity sync)" --> GS2
   GS2 -- "gRPC direct P2P (entity sync)" --> GS1
@@ -54,6 +54,8 @@ flowchart TB
   linkStyle 9,10,11 stroke:gray
   linkStyle 12,13,14,15 stroke:brown,stroke-dasharray:5
 ```
+
+> Control-plane RPCs (`TransferZone`, `PrepareShutdown`, `PrepareTransfer`, `Register`, `Heartbeat`) are called **by Game Server on Room Service**. Data-plane zone state flows via `GameServer.ZoneStateSync` (P2P per ADR-002).
 
 ## Communication Patterns
 
@@ -85,14 +87,15 @@ flowchart TB
   3. Forwards to Game Server via gRPC
   4. Routes Game Server responses back to client WebSocket
 - **Routing:** Stateless — Gateway caches zone→GameServer mapping (TTL: 5s, pushed on change)
+- **Note:** The Gateway is a plain HTTP/WebSocket server (no gRPC service). Client packet relay uses the `GameServer.Relay` bidi stream. The empty `Gateway` proto service is unused.
 
-### 4. gRPC Coordinator (Gateway/Room Service/Game Server → Room Service)
+### 4. gRPC Coordinator (Gateway/Game Server → Room Service)
 
 - **Transport:** gRPC over HTTP/2 (private network)
-- **Purpose:** Control-plane operations:
-  - Gateway: `LookupZone(zoneID) → GameServerAddress`
-  - Game Server: `Register`, `Heartbeat`, `PrepareShutdown`
-  - Room Service → Game Server: `TransferZone`, `PrepareTransfer` (initiated by Room Service)
+- **Purpose:** Control-plane operations (all RPCs below are defined on `RoomService`):
+  - Gateway → Room Service: `LookupZone(zoneID) → GameServerAddress`
+  - Game Server → Room Service: `Register`, `Heartbeat`, `PrepareShutdown`, `TransferZone`, `PrepareTransfer`
+- **Note:** `TransferZone`/`PrepareTransfer`/`PrepareShutdown` are called **by Game Server on Room Service**, not the reverse. Data-plane zone state flows via `GameServer.ZoneStateSync` (P2P per ADR-002).
 
 ### 5. Event Bus (Redis pub/sub — Non-Realtime)
 

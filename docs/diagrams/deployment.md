@@ -2,6 +2,10 @@
 
 > **Last Updated:** 2026-06-26
 
+## Purpose
+
+Production topology on K3s — gateway, coordinator, game, data, and monitoring tiers — plus per-service capacity limits and the staged environment sizing from single-VM to multi-node clusters.
+
 ## Production Topology (K3s)
 
 ```mermaid
@@ -57,12 +61,12 @@ graph TB
     GW2 -->|gRPC :9000| RS1
     GW2 -->|gRPC :9000| RS2
 
-    GW1 -->|gRPC :9001| GS1
-    GW1 -->|gRPC :9001| GS2
-    GW1 -->|gRPC :9001| GS3
-    GW2 -->|gRPC :9001| GS1
-    GW2 -->|gRPC :9001| GS2
-    GW2 -->|gRPC :9001| GS3
+    GW1 -->|gRPC :9000| GS1
+    GW1 -->|gRPC :9000| GS2
+    GW1 -->|gRPC :9000| GS3
+    GW2 -->|gRPC :9000| GS1
+    GW2 -->|gRPC :9000| GS2
+    GW2 -->|gRPC :9000| GS3
 
     RS1 -->|gRPC :9000| GS1
     RS1 -->|gRPC :9000| GS2
@@ -71,9 +75,9 @@ graph TB
     RS2 -->|gRPC :9000| GS2
     RS2 -->|gRPC :9000| GS3
 
-    GS1 <-->|gRPC P2P :9001| GS2
-    GS1 <-->|gRPC P2P :9001| GS3
-    GS2 <-->|gRPC P2P :9001| GS3
+    GS1 <-->|gRPC P2P :9000| GS2
+    GS1 <-->|gRPC P2P :9000| GS3
+    GS2 <-->|gRPC P2P :9000| GS3
 
     GS1 -->|:5432| PG1
     GS2 -->|:5432| PG1

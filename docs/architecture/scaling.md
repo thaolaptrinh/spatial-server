@@ -53,13 +53,13 @@ Defines how each service scales horizontally and vertically, what triggers scali
 ```
 1. Room Service detects threshold breach (CPU >70%, memory >80%, or zone stddev >30%)
 2. Room Service signals orchestrator to spawn new Game Server
-   (Dev: docker compose scale; Prod: HPA custom metric → pod spawn)
+   (Dev: docker compose up --scale; Prod: HPA custom metric → pod spawn)
 3. New Game Server starts → connects to Room Service → Register(JOINING)
 4. Room Service selects most loaded ACTIVE Game Servers
 5. Room Service picks zones to transfer from each (least loaded zones first)
 6. For each zone: PREPARE (source pauses AOI updates) → stream snapshot via gRPC
 7. Target loads snapshot, starts simulation, confirms ownership
-8. Room Service updates zone_ownership table (PostgreSQL transaction)
+8. Room Service updates zones table (PostgreSQL transaction)
 9. Gateway routing table refreshed (pushed or polled)
 10. New Game Server reaches ACTIVE state
 ```
@@ -69,9 +69,9 @@ Defines how each service scales horizontally and vertically, what triggers scali
 ```
 1. Room Service detects sustained low load (all metrics below 30% for 5 min)
 2. Room Service selects drain candidate (fewest zones, lowest load)
-3. Room Service sends PrepareShutdown to candidate
+3. Candidate Game Server calls `PrepareShutdown` on Room Service (triggered by orchestrator scale-down)
 4. Candidate rejects new zone assignments
-5. Room Service transfers all zones from candidate to other servers
+5. Candidate transfers all zones to other Game Servers (P2P `ZoneStateSync`) and confirms via `TransferZone` on Room Service
 6. Candidate reaches 0 zones → transitions to SHUTDOWN
 7. Room Service deregisters candidate
 8. Candidate terminates
@@ -81,8 +81,8 @@ Defines how each service scales horizontally and vertically, what triggers scali
 
 ```
 1. Room Service detects heartbeat timeout (3 consecutive misses = 15s)
-2. Room Service marks Game Server as LOST in zone_ownership table
-3. Room Service identifies zones owned by lost server
+2. Room Service marks Game Server as SHUTDOWN in zones table
+3. Room Service identifies zones owned by the shutdown server
 4. Room Service assigns orphan zones to available Game Servers
 5. New owners load zone state from PostgreSQL (last persisted snapshot)
 6. Ghost entities cleaned on next AOI sweep

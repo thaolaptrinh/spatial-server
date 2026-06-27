@@ -10,7 +10,7 @@ Entities are the core simulated objects within a runtime. Every player avatar, N
 
 The entity model lives entirely within the Game Server. It is not exposed to clients directly — clients receive serialized snapshots of entities within their Area of Interest (AOI). The Gateway never inspects or interprets entity data.
 
-Existing ADRs define zone ownership (ADR-001), AOI strategy (ADR-003), and packet protocol (ADR-010), but do not define the entity data model itself — what fields every entity has, how entity types are distinguished, how attributes are stored, and how entity lifecycle works.
+Existing ADRs define zone ownership ([ADR-001](001-zone-ownership.md)), AOI strategy ([ADR-003](003-aoi-strategy.md)), and packet protocol ([ADR-010](010-packet-protocol.md)), but do not define the entity data model itself — what fields every entity has, how entity types are distinguished, how attributes are stored, and how entity lifecycle works.
 
 ## Problem
 
@@ -28,8 +28,8 @@ Every entity has the following fields:
 |-------|------|-------------|
 | `id` | UUIDv7 | Globally unique entity identifier. UUIDv7 provides time-ordered IDs for efficient indexing. |
 | `type` | string | Entity type tag (e.g., `"player"`, `"npc"`, `"interactive"`). Free-form string, not a protobuf oneof. |
-| `position` | Vector3 (float32, float32, float32) | World-space position (x, y, z). |
-| `rotation` | Quaternion (float32, float32, float32, float32) | World-space rotation. |
+| `position` | Vector3 (float32, float32, float32) | Runtime-space position (x, y, z). |
+| `rotation` | Quaternion (float32, float32, float32, float32) | Runtime-space rotation. |
 | `attributes` | map<string, bytes> | Type-specific attributes as opaque byte slices. Keys are attribute names, values are protobuf-encoded or plain serialized data. |
 | `zone_id` | string | The zone this entity currently belongs to. Set on spawn, changes on zone migration. |
 | `owner_id` | string | The player ID that owns/controls this entity (empty for NPCs and environment objects). |
@@ -47,7 +47,7 @@ Every entity has the following fields:
 - The Game Server interprets the byte content based on the entity's `type` string.
 - For example, a `"player"` entity might have attributes like `"health"` → `{uint32: 100}`, `"name"` → `{string: "Alice"}`, while an `"interactive"` entity might have `"state"` → `{enum: OPEN}`.
 - Attributes are serialized using protobuf within the Game Server (not exposed to Gateway or clients in raw form).
-- Clients receive attributes in the packet serialization format defined by ADR-010 (not raw protobuf, but optimized for realtime sync).
+- Clients receive attributes in the packet serialization format defined by [ADR-010](010-packet-protocol.md) (not raw protobuf, but optimized for realtime sync).
 
 ### Entity Lifecycle
 
@@ -58,13 +58,13 @@ spawn → simulate → despawn
 1. **Spawn**: An entity is created in a zone.
    - Entity ID is generated (UUIDv7).
    - Entity is assigned to a zone based on its initial position.
-   - Entity is registered in the zone's entity index and the AOI index (ADR-003).
+   - Entity is registered in the zone's entity index and the AOI index ([ADR-003](003-aoi-strategy.md)).
    - A spawn event is broadcast to all players within AOI range.
 
 2. **Simulate**: The entity exists and is updated each tick.
    - Player-controlled entities: updates come from client packets (position, rotation, actions).
    - NPC/autonomous entities: updates come from the Game Server's simulation loop *(planned — not yet implemented)*.
-   - Each tick, the Game Server checks if the entity crossed a zone boundary (zone migration per ADR-002).
+   - Each tick, the Game Server checks if the entity crossed a zone boundary (zone migration per [ADR-002](002-zone-migration.md)).
    - Changed attributes are batched and sent to interested clients as state delta packets.
    - AOI index is updated if position changed.
 
@@ -83,7 +83,7 @@ spawn → simulate → despawn
 
 - An entity cannot exist in multiple zones simultaneously in the MVP.
 - When an entity crosses a zone boundary (based on position):
-  1. The source Game Server initiates entity migration (per ADR-002).
+   1. The source Game Server initiates entity migration (per [ADR-002](002-zone-migration.md)).
   2. The entity is serialized (ID, type, position, rotation, attributes) and sent to the destination Game Server.
   3. The destination Game Server spawns the entity.
   4. The source Game Server despawns the entity.
@@ -113,7 +113,7 @@ spawn → simulate → despawn
 - String-typed entity types are flexible but sacrifice compile-time safety — a typo in an entity type string will not be caught until runtime. Mitigation: Game Server logs a warning on unknown entity types and unit tests validate the entity type registry.
 - Opaque byte slices for attributes are flexible but require the Game Server to know how to interpret each entity type's attributes. If a Game Server receives an entity with an unknown type during zone migration, it stores the opaque data but cannot simulate it.
 - UUIDv7 IDs are larger than integer IDs (16 bytes vs 4-8 bytes) but eliminate the need for a centralized ID generator and avoid collision risks.
-- Cross-zone entity migration is complex but necessary for a runtime divided into zones. The complexity is isolated to the migration protocol (ADR-002), not the entity model itself.
+- Cross-zone entity migration is complex but necessary for a runtime divided into zones. The complexity is isolated to the migration protocol ([ADR-002](002-zone-migration.md)), not the entity model itself.
 
 ## Consequences
 

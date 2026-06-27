@@ -8,11 +8,11 @@ build:
 
 # Run all tests with race detection
 test:
-	go test ./internal/... ./pkg/... -v -race -count=1
+	go test ./internal/... ./pkg/... ./apps/... -v -race -count=1
 
 # Run tests without race (faster)
 test-fast:
-	go test ./internal/... ./pkg/... -count=1
+	go test ./internal/... ./pkg/... ./apps/... -count=1
 
 # Lint all packages
 lint:

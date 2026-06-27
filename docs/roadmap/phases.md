@@ -1,6 +1,6 @@
 # Development Roadmap
 
-> **Last Updated:** 2026-06-26
+> **Last Updated:** 2026-06-27
 
 ## Phase Overview
 
@@ -8,10 +8,12 @@
 |-------|----------|-------|--------|
 | Phase 0 | 3–5 days | Architecture & specs (ADRs) | ✅ Complete |
 | Phase 1A | 1 week | Foundation packages | ✅ Complete |
-| Phase 1B | 1 week | Service skeletons | 📋 Planned |
-| Phase 1C | 1 week | Communication | 📋 Planned |
-| Phase 1D | 1 week | Runtime | 📋 Planned |
-| Phase 1E | 1 week | Runtime features | 📋 Planned |
+| Phase 1B | 1 week | Service skeletons | ✅ Complete |
+| Phase 1C | 1 week | Communication | ✅ Complete |
+| Phase 1D | 1 week | Runtime | ✅ Complete |
+| Phase 1E | 1 week | Runtime features | ✅ Complete |
+| Phase 1F | 1 week | Realtime data path | ✅ Complete |
+| Phase 1G | 1 week | Make it demoable | ✅ Complete |
 | Phase 2 | 2 weeks | Distributed scaling | 📋 Planned |
 | Phase 3 | 2 weeks | Production hardening | 📋 Planned |
 
@@ -55,7 +57,7 @@
 
 ---
 
-## Phase 1B: Service Skeletons (Planned)
+## Phase 1B: Service Skeletons (Complete)
 
 **Purpose:** Create the three service binaries as shells that wire dependencies, start, and shut down gracefully. No business logic, no simulation, no networking beyond gRPC server bootstrap.
 
@@ -89,7 +91,7 @@
 
 ---
 
-## Phase 1C: Communication (Planned)
+## Phase 1C: Communication (Complete)
 
 **Purpose:** Implement client connectivity end-to-end. Gateway accepts WebSocket connections, authenticates via JWT, routes packets to the correct Game Server via Room Service lookup, and forwards packets over a shared gRPC stream.
 
@@ -116,7 +118,7 @@
 
 ---
 
-## Phase 1D: Runtime (Planned)
+## Phase 1D: Runtime (Complete)
 
 **Purpose:** Implement the Game Server simulation loop with entity and zone management. Process inbound packets from the Gateway stream. No AOI integration yet.
 
@@ -142,7 +144,7 @@
 
 ---
 
-## Phase 1E: Runtime Features (Planned)
+## Phase 1E: Runtime Features (Complete)
 
 **Purpose:** Integrate AOI into the Game Server so entities only receive updates about visible entities. Add zone boundary detection for ghost entity support (same-server only; cross-server in Phase 2).
 
@@ -165,6 +167,50 @@
 - Ghost entity despawns after TTL expiry
 - All unit tests pass
 - Integration test: 3+ entities synchronize correctly within one Game Server
+
+---
+
+## Phase 1F: Realtime Data Path (Complete)
+
+**Purpose:** Close the realtime loop end-to-end. Client WebSocket packets flow through the Gateway into the Game Server simulation loop, and AOI-filtered entity updates flow back out to interested clients — over the wiring established in Phases 1B–1E.
+
+**Deliverables:**
+
+| Component | Responsibility |
+|-----------|---------------|
+| Gateway acceptor | Accept WebSocket upgrades, validate JWT, bind connection to a session. |
+| Gateway routing | `LookupZone` → cache → forward packets over the shared Gateway↔Game Server gRPC stream. |
+| Game Server inbound | Drain Gateway stream into the 20Hz game loop; dispatch by `PacketID`. |
+| Game Server outbound | Per-tick AOI query → build `EntitySpawn`/`EntityMove`/`EntityDespawn` packets → relay via Gateway to interested clients. |
+
+**Non-goals:** Cross-Game Server entity migration, zone transfer, persistent entity state.
+
+**Definition of Done:**
+- A connected client's position updates drive AOI recalculation in the Game Server.
+- Other clients within AOI range receive `EntityMove`/`EntitySpawn`/`EntityDespawn`.
+- All unit + app-level tests pass.
+
+---
+
+## Phase 1G: Make It Demoable (Complete)
+
+**Purpose:** Turn the wired services into a runnable, demonstrable local system. The three services boot together in Docker Compose, a CLI client exercises the realtime path, and `make demo` brings it all up.
+
+**Deliverables:**
+
+| Component | Responsibility |
+|-----------|---------------|
+| Docker Compose | gateway + room-service + game-server + PostgreSQL + Redis, wired with healthchecks. |
+| `tools/client/` | CLI demo client: connect, spawn entity, stream position updates. |
+| Health endpoints | Each service exposes `/health` (or gRPC health) for readiness gating. |
+| `make demo` | Bring up the stack, wait for gateway readiness, run the demo client. |
+
+**Non-goals:** Production K3s manifests, autoscaling, TLS.
+
+**Definition of Done:**
+- `make demo` brings up the full stack locally.
+- The demo client connects, spawns, and observes its own entity updates.
+- Graceful shutdown on SIGTERM with no errors.
 
 ---
 
@@ -207,4 +253,3 @@
 
 - [Architecture Overview](../architecture/overview.md)
 - [ADR Index](../adr/README.md)
-- [Phase 1B Spec](../superpowers/specs/2026-06-26-phase1b-service-skeletons.md)
