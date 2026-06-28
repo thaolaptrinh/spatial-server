@@ -342,6 +342,7 @@ package validation
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -430,7 +431,7 @@ func NewSummary(reports []*ValidationReport) *SummaryReport {
 	s := &SummaryReport{
 		Framework: FrameworkMeta{
 			FrameworkVersion: frameworkVersion,
-			ScenarioVersion:  "1.0.0",
+			ScenarioVersion:  "",
 			ExecTimestamp:    time.Now(),
 		},
 	}
@@ -756,15 +757,15 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 	}
 	report.Baseline = baseline
 
+	// Register Recover before Inject so cleanup always executes,
+	// even if Inject partially applies a fault and returns an error.
+	defer func() { _ = sc.Injector.Recover(context.Background(), infra) }()
 	if err := sc.Injector.Inject(scopedCtx, infra); err != nil {
 		report.Outcome = OutcomeError
 		report.RootCause = fmt.Sprintf("inject: %v", err)
 		return report
 	}
-	defer func() { _ = sc.Injector.Recover(context.Background(), infra) }()
 
-	// Recovery duration: starts immediately after Inject() succeeds,
-	// ends when RecoveryWaiter.Wait() returns. Populated even on failure.
 	// Recovery duration: starts immediately after Inject() succeeds,
 	// ends when RecoveryWaiter.Wait() returns. Populated even on failure.
 	recoverStart := time.Now()
@@ -2806,8 +2807,9 @@ A panic inside a scenario never leaves the system in a dirty state.
 Scenarios are registered **explicitly** by returning slices from named functions:
 `ProcessScenarios(t)`, `ComposeScenarios()`. There is no global registry.
 
-- **Duplicate IDs:** Tests use `t.Run(id, ...)` — Go's subtests panic on duplicate names.
-  This is intentional: duplicate scenario IDs are a programmer error caught at test time.
+- **Duplicate IDs:** `ValidateScenarios()` is called before execution. Duplicate IDs
+  produce an immediate error message with the conflicting indices. `t.Run(id, ...)` also
+  catches duplicates at test time as a secondary safeguard.
 - **Registration timing:** `ProcessScenarios()` is called at test invocation, not via `init()`.
   Order is deterministic, debuggable.
 - **No dynamic registration:** Adding a scenario means adding one entry to the slice.
