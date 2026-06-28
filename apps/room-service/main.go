@@ -27,6 +27,7 @@ import (
 	"github.com/thaolaptrinh/spatial-server/internal/storage"
 	storageroom "github.com/thaolaptrinh/spatial-server/internal/storage/room"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
+	"time"
 )
 
 type roomServiceServer struct {
@@ -175,6 +176,15 @@ func main() {
 		allocator: room.LeastLoadedAllocator{},
 	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
+
+	sweeper := room.NewProductionSweeper(service.servers, service.zones, service.allocator, service.fanout, room.SweeperConfig{
+		Interval:      5 * time.Second,
+		MissThreshold: 15 * time.Second,
+	})
+	sweeperCtx, sweeperCancel := context.WithCancel(context.Background())
+	defer sweeperCancel()
+	go sweeper.Run(sweeperCtx)
+	logger.Info("zone ownership sweeper started")
 
 	apiSrv := room.NewSpatialServerAPI(room.NewMemoryRuntimeStore(), fmt.Sprintf("gateway:%d", cfg.Gateway.WSPort))
 	spatialserverv1.RegisterSpatialServerAPIServer(srv, apiSrv)

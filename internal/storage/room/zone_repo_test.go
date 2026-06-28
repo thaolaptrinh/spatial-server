@@ -28,3 +28,28 @@ func TestZoneRepository_ClaimLookupRelease(t *testing.T) {
 	_, err = repo.Lookup(ctx, "z1")
 	assert.ErrorIs(t, err, types.ErrNotFound)
 }
+
+func TestZoneRepository_ListByServer(t *testing.T) {
+	pool := storage.TestDB(t)
+	repo := NewZoneRepository(pool)
+	ctx := context.Background()
+
+	_, _ = pool.Exec(ctx, `INSERT INTO runtimes (id) VALUES ('r1') ON CONFLICT DO NOTHING`)
+	_, _ = pool.Exec(ctx, `INSERT INTO runtimes (id) VALUES ('r2') ON CONFLICT DO NOTHING`)
+
+	require.NoError(t, repo.Claim(ctx, "z1", "r1", types.ServerID("gs-A")))
+	require.NoError(t, repo.Claim(ctx, "z2", "r2", types.ServerID("gs-A")))
+	require.NoError(t, repo.Claim(ctx, "z3", "r1", types.ServerID("gs-B")))
+
+	zsA, err := repo.ListByServer(ctx, types.ServerID("gs-A"))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"z1", "z2"}, zsA)
+
+	zsB, err := repo.ListByServer(ctx, types.ServerID("gs-B"))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"z3"}, zsB)
+
+	zsC, err := repo.ListByServer(ctx, types.ServerID("gs-C"))
+	require.NoError(t, err)
+	assert.Empty(t, zsC)
+}

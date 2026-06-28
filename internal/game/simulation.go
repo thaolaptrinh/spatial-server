@@ -404,6 +404,7 @@ drain:
 		g.updateVisibility(zid)
 	}
 	g.sweepGhosts()
+	g.SweepDisconnected()
 
 	elapsed := g.lifecycleClock().Sub(now)
 	g.metrics.TickDuration(elapsed)

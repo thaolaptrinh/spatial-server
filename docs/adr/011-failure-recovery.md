@@ -2,7 +2,20 @@
 
 ## Status
 
-Approved
+Approved — partial implementation in v0.1.0-alpha, completed in v0.1.0-alpha+post-gap-closure
+
+## Implementation Status (2026-06-28)
+
+| Recovery Path | Status | Evidence |
+|---|---|---|
+| Game Server crash orphan detection | ✅ Implemented | `apps/room-service/main.go:180-189` — `ProductionSweeper` wired |
+| Game Server crash zone reassignment | ✅ Implemented | `internal/room/sweeper_production.go:94-117` — release + claim + fanout broadcast |
+| Disconnected entity cleanup in tick | ✅ Implemented | `internal/game/simulation.go:407` — `g.SweepDisconnected()` called each tick |
+| Gamer Server snapshot crash recovery | ✅ Implemented | `apps/game-server/main.go:373-376` — loads latest snapshot on startup |
+| Gateway drain on shutdown | ✅ Implemented | `apps/gateway/main.go:114` — `handler.SetDraining(true)` |
+| Room Service HA failover | ❌ Not implemented | `Lease` interface defined, K3s integration deferred to Phase 3 |
+| PG crash graceful degradation | ❌ Not implemented | Deferred to Phase 3 |
+| Redis crash graceful degradation | ❌ Not implemented | Deferred to Phase 3 |
 
 ## Context
 

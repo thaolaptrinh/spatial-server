@@ -159,7 +159,7 @@ func toProtoStatus(s types.RuntimeStatus) spatialserverv1.RuntimeStatus {
 }
 
 type MemoryRuntimeStore struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	data map[string]*RuntimeRecord
 }
 
@@ -189,8 +189,8 @@ func (m *MemoryRuntimeStore) Create(_ context.Context, id string, zoneCount int,
 }
 
 func (m *MemoryRuntimeStore) Get(_ context.Context, id string) (*RuntimeRecord, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	r, ok := m.data[id]
 	if !ok {
 		return nil, types.ErrNotFound
@@ -210,8 +210,8 @@ func (m *MemoryRuntimeStore) Destroy(_ context.Context, id string) error {
 }
 
 func (m *MemoryRuntimeStore) List(_ context.Context, _ string, _ int) ([]*RuntimeRecord, string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var out []*RuntimeRecord
 	for _, r := range m.data {
 		if r.Status != types.RuntimeStatusDestroyed {

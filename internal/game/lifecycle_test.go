@@ -59,3 +59,32 @@ func TestSweepDisconnected_DespawnsAfterWindow(t *testing.T) {
 	g.SweepDisconnected()
 	assert.Equal(t, 0, g.EntityCount())
 }
+
+func TestTick_CallsSweepDisconnected_EntityDespawnedAfterReconnectWindow(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	clock := newFakeClock()
+	g.lifecycleClock = clock.now
+	g.reconnectWindow = 30 * time.Second
+	g.AddEntity(entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1")))
+
+	g.MarkDisconnected(types.EntityID("e1"))
+	require.Equal(t, 1, g.EntityCount())
+
+	clock.advance(31 * time.Second)
+	g.Tick()
+	assert.Equal(t, 0, g.EntityCount(), "tick() must call SweepDisconnected() and despawn expired entities")
+}
+
+func TestTick_DoesNotDespawnRecentlyDisconnectedEntities(t *testing.T) {
+	g := New(types.ServerID("gs-1"), WithTickRate(10*time.Millisecond))
+	clock := newFakeClock()
+	g.lifecycleClock = clock.now
+	g.reconnectWindow = 30 * time.Second
+	g.AddEntity(entity.New(types.EntityID("e1"), "avatar", types.RuntimeID("r1")))
+
+	g.MarkDisconnected(types.EntityID("e1"))
+
+	clock.advance(10 * time.Second)
+	g.Tick()
+	assert.Equal(t, 1, g.EntityCount(), "entity still within reconnect window must not be despawned")
+}

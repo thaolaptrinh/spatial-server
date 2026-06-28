@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## v0.1.0-alpha-post-gap-closure (2026-06-28)
+
+### Production Gap Fixes
+
+Critical production gaps identified by the Evidence Audit (EVIDENCE_AUDIT.md):
+
+- **F1 — Orphan zone detection (Sweeper wired):** `ProductionSweeper` instantiated and started in `apps/room-service/main.go:180-189`. Dead Game Servers are detected after 15s heartbeat miss, zones are released and reassigned via `LeastLoadedAllocator`. Ownership changes broadcast through `WatcherFanout`. Closes NF1 from Evidence Audit.
+- **F2 — Disconnected entity cleanup (SweepDisconnected wired):** `g.SweepDisconnected()` called each tick at `internal/game/simulation.go:407`. Entities past the 30s reconnect window are removed from entity/AOI/session state. Closes NF2 from Evidence Audit.
+- **F3 — Read concurrency (Mutex→RWMutex):** `MemoryRuntimeStore.mu` changed from `sync.Mutex` to `sync.RWMutex`. `Get()` and `List()` use `RLock()` for concurrent reads. Closes NF4 from Evidence Audit.
+
+### New Storage Methods (PG-backed)
+
+- `ServerRepository.ListDead(ctx, since)` — lists active servers with stale heartbeat
+- `ServerRepository.MarkShutdown(ctx, id)` — marks a server as shutdown
+- `ZoneRepository.ListByServer(ctx, serverID)` — lists all zones owned by a server
+- `ProductionSweeper` — PG-backed sweeper using `ServerStore`/`ZoneStore` interfaces
+
+### Regression Tests
+
+- `TestTick_CallsSweepDisconnected_EntityDespawnedAfterReconnectWindow`
+- `TestTick_DoesNotDespawnRecentlyDisconnectedEntities`
+- `TestServerRepository_ListDead_ReturnsTimeoutServers`
+- `TestZoneRepository_ListByServer`
+
+### Documentation
+
+- `docs/adr/011-failure-recovery.md` — implementation status table added
+- `docs/milestones/v0.1.0-alpha.md` — post-gap-closure additions section
+- `EVIDENCE_AUDIT.md` — complete evidence audit of all architectural concerns
+- `ARCHITECTURE_REVIEW.md` — independent Principal Engineer architecture review
+
+---
+
 ## v0.1.0-alpha (2026-06-28)
 
 ### Architecture

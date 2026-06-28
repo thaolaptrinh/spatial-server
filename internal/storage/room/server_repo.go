@@ -66,6 +66,33 @@ func (r *ServerRepository) List(ctx context.Context) ([]*room.NodeDescriptor, er
 	return out, nil
 }
 
+func (r *ServerRepository) ListDead(ctx context.Context, since time.Duration) ([]types.ServerID, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id FROM game_servers WHERE status='active' AND last_heartbeat < NOW() - $1::INTERVAL`,
+		fmt.Sprintf("%d seconds", int(since.Seconds())))
+	if err != nil {
+		return nil, fmt.Errorf("list dead servers: %w", err)
+	}
+	defer rows.Close()
+	var out []types.ServerID
+	for rows.Next() {
+		var id types.ServerID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (r *ServerRepository) MarkShutdown(ctx context.Context, id types.ServerID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE game_servers SET status='shutdown' WHERE id=$1`, id)
+	if err != nil {
+		return fmt.Errorf("mark shutdown server %s: %w", id, err)
+	}
+	return nil
+}
+
 func (r *ServerRepository) Remove(ctx context.Context, id types.ServerID) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM game_servers WHERE id=$1`, id)
 	if err != nil {

@@ -61,6 +61,23 @@ func (r *ZoneRepository) Release(ctx context.Context, zoneID string, serverID ty
 	return nil
 }
 
+func (r *ZoneRepository) ListByServer(ctx context.Context, serverID types.ServerID) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id FROM zones WHERE server_id=$1`, serverID)
+	if err != nil {
+		return nil, fmt.Errorf("list zones by server %s: %w", serverID, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
 func (r *ZoneRepository) Lookup(ctx context.Context, zoneID string) (types.ServerID, error) {
 	var owner *string
 	err := r.pool.QueryRow(ctx, `SELECT server_id FROM zones WHERE id=$1`, zoneID).Scan(&owner)
