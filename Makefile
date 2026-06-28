@@ -99,7 +99,11 @@ demo:
 	sleep 3; \
 	for i in 1 2 3 4 5; do \
 		echo "Starting client (attempt $$i)"; \
-		if go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1; then \
+		if go run ./tools/client/ \
+			-addr localhost:8080 \
+			-player p1 -runtime r1 \
+			-provision -room-service localhost:9001 \
+			-pg-dsn "postgres://spatial:spatial@localhost:5432/spatial?sslmode=disable"; then \
 			break; \
 		fi; \
 		echo "  client failed, retrying in 3s..."; \
