@@ -39,3 +39,4 @@ Thumbs.db
 infra/helm/*/charts/
 infra/helm/*.tgz
 
+artifacts/
