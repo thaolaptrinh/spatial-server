@@ -19,6 +19,12 @@
       "skillPath": "skills/chaos-engineer/SKILL.md",
       "computedHash": "bc0cdbf36e1860a66d4f8d967c78ee31b1daed917c1ab9d7a015237ff071e718"
     },
+    "dbml": {
+      "source": "thaolaptrinh/skills",
+      "sourceType": "github",
+      "skillPath": "skills/dbml/SKILL.md",
+      "computedHash": "946bbf26d31d06692383c1369dfc2d573db6e82007969d29a90d6ef740a998b9"
+    },
     "docker-expert": {
       "source": "sickn33/antigravity-awesome-skills",
       "sourceType": "github",
