@@ -110,7 +110,7 @@ func main() {
 				log.Printf("unmarshal state: %v", err)
 				continue
 			}
-			log.Printf("STATE %s anim=%s hp=%d", st.GetEntityId(), st.GetAnimation(), st.GetHealth())
+			log.Printf("STATE %s attrs=%d", st.GetEntityId(), len(st.GetAttributes()))
 
 			default:
 				log.Printf("UNKNOWN packetID=%d len=%d", id, len(payload))

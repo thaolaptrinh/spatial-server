@@ -24,12 +24,18 @@ func NewReport(scenario string) *Report {
 }
 
 func (r *Report) Write() error {
+	return r.WriteTo(fmt.Sprintf("benchmarks/reports/%s-%s.json", r.Scenario, time.Now().Format("20060102T150405")))
+}
+
+// WriteTo writes the report JSON to an explicit path (used by the CLI via Write
+// and directly by tests to avoid touching the shared reports directory).
+func (r *Report) WriteTo(path string) error {
 	r.End = time.Now().Format(time.RFC3339)
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(fmt.Sprintf("benchmarks/reports/%s-%s.json", r.Scenario, time.Now().Format("20060102T150405")), data, 0644)
+	return os.WriteFile(path, data, 0644)
 }
 
 func (r *Report) PrintSummary() {

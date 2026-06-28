@@ -825,8 +825,6 @@ func (x *EntityAction) GetTimestamp() int64 {
 type EntityState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EntityId      string                 `protobuf:"bytes,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Animation     string                 `protobuf:"bytes,2,opt,name=animation,proto3" json:"animation,omitempty"`
-	Health        int32                  `protobuf:"varint,3,opt,name=health,proto3" json:"health,omitempty"`
 	Attributes    map[string][]byte      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -868,20 +866,6 @@ func (x *EntityState) GetEntityId() string {
 		return x.EntityId
 	}
 	return ""
-}
-
-func (x *EntityState) GetAnimation() string {
-	if x != nil {
-		return x.Animation
-	}
-	return ""
-}
-
-func (x *EntityState) GetHealth() int32 {
-	if x != nil {
-		return x.Health
-	}
-	return 0
 }
 
 func (x *EntityState) GetAttributes() map[string][]byte {
@@ -949,18 +933,16 @@ const file_spatialserver_v1_common_proto_rawDesc = "" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1a\n" +
 	"\bsequence\x18\x04 \x01(\x05R\bsequence\x12\x1c\n" +
-	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\x8c\x02\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\xf5\x01\n" +
 	"\vEntityState\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\tR\bentityId\x12\x1c\n" +
-	"\tanimation\x18\x02 \x01(\tR\tanimation\x12\x16\n" +
-	"\x06health\x18\x03 \x01(\x05R\x06health\x12M\n" +
+	"\tentity_id\x18\x01 \x01(\tR\bentityId\x12M\n" +
 	"\n" +
 	"attributes\x18\x04 \x03(\v2-.spatialserver.v1.EntityState.AttributesEntryR\n" +
 	"attributes\x12\x1c\n" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01*\xa2\x01\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\tanimationR\x06health*\xa2\x01\n" +
 	"\rRuntimeStatus\x12\x1e\n" +
 	"\x1aRUNTIME_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17RUNTIME_STATUS_CREATING\x10\x01\x12\x19\n" +

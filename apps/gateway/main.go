@@ -27,12 +27,15 @@ type roomLookuper struct {
 	client spatialserverv1.RoomServiceClient
 }
 
-func (r *roomLookuper) LookupZone(ctx context.Context, zoneID string) (string, int32, error) {
+func (r *roomLookuper) LookupZone(ctx context.Context, zoneID string) (string, error) {
 	resp, err := r.client.LookupZone(ctx, &spatialserverv1.LookupZoneRequest{ZoneId: zoneID})
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
-	return resp.GetHost(), resp.GetPort(), nil
+	if a := resp.GetAdvertiseAddr(); a != "" {
+		return a, nil
+	}
+	return fmt.Sprintf("%s:%d", resp.GetHost(), resp.GetPort()), nil
 }
 
 func main() {
@@ -62,7 +65,10 @@ func main() {
 	healthClient := grpc_health_v1.NewHealthClient(rsConn)
 
 	cache := gateway.NewRouterCache(5 * time.Second)
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	defer baseCancel()
 	handler := gateway.NewHandler(cache, lookuper, []byte(cfg.Gateway.JWTSecret), coder.Accepter{})
+	handler.SetBaseContext(baseCtx)
 	handler.SetReadyFn(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -71,6 +77,7 @@ func main() {
 	})
 
 	reg := metrics.NewRegistry()
+	handler.SetMetrics(reg)
 
 	go func() {
 		mux := http.NewServeMux()

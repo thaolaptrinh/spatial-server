@@ -28,10 +28,12 @@ This directory contains Architecture Decision Records (ADRs) for the Spatial Ser
 | 018 | [Security](018-security.md) | Accepted |
 | 019 | [Observability](019-observability.md) | Accepted |
 | 020 | [Benchmark Strategy](020-benchmark-strategy.md) | Accepted |
-| 021 | [Gateway Architecture](021-gateway-architecture.md) | Accepted |
-| 022 | [Session Management](022-session-management.md) | Accepted |
-| 023 | [Entity Model](023-entity-model.md) | Accepted |
+| 021 | [Gateway Architecture](021-gateway-architecture.md) | Implemented |
+| 022 | [Session Management](022-session-management.md) | Implemented |
+| 023 | [Entity Model](023-entity-model.md) | Implemented |
 | 024 | [Multi-cloud Provider Abstraction](024-multicloud-provider-abstraction.md) | Accepted |
+| 025 | [Platform Terminology Model](025-platform-terminology-model.md) | Implemented |
+| 026 | [Runtime Extension Model](026-runtime-extension-model.md) | Implemented |
 
 ## Reading Order
 

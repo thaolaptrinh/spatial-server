@@ -54,7 +54,7 @@ func TestBaseLifecycle_NoOp(t *testing.T) {
 		l.Despawn()
 		l.OnEnterZone("z1")
 		l.OnLeaveZone("z1")
-		l.OnSimulate(time.Millisecond)
+		l.OnSimulate(nil, time.Millisecond)
 		l.OnAction("jump", nil)
 	})
 }
@@ -63,7 +63,7 @@ func TestEntity_LifecycleAttach(t *testing.T) {
 	rec := &recordingLifecycle{}
 	e := New("e1", "npc", types.RuntimeID("r1"))
 	e.Lifecycle = rec
-	e.Lifecycle.OnSimulate(50 * time.Millisecond)
+	e.Lifecycle.OnSimulate(e, 50 * time.Millisecond)
 	e.Lifecycle.OnAction("attack", []byte("x"))
 	assert.Equal(t, 1, rec.simCount)
 	assert.Equal(t, "attack", rec.lastAction)
@@ -75,5 +75,5 @@ type recordingLifecycle struct {
 	lastAction string
 }
 
-func (r *recordingLifecycle) OnSimulate(time.Duration) { r.simCount++ }
+func (r *recordingLifecycle) OnSimulate(_ *Entity, _ time.Duration) { r.simCount++ }
 func (r *recordingLifecycle) OnAction(a string, _ []byte) { r.lastAction = a }

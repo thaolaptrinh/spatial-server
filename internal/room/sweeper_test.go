@@ -13,11 +13,11 @@ import (
 func TestSweeper_MarksShutdownAfterMissedHeartbeats(t *testing.T) {
 	reg := NewServerRegistry()
 	zo := NewZoneOwnership()
-	require.NoError(t, reg.Register(&ServerInfo{ID: types.ServerID("gs-A"), Host: "a", Port: 9000, MaxZones: 10}))
-	require.NoError(t, reg.Register(&ServerInfo{ID: types.ServerID("gs-B"), Host: "b", Port: 9000, MaxZones: 10}))
+	require.NoError(t, reg.Register(&NodeDescriptor{NodeID: types.ServerID("gs-A"), Host: "a", Port: 9000, Capacity: NodeCapacity{MaxZones: 10}}))
+	require.NoError(t, reg.Register(&NodeDescriptor{NodeID: types.ServerID("gs-B"), Host: "b", Port: 9000, Capacity: NodeCapacity{MaxZones: 10}}))
 	require.NoError(t, reg.Heartbeat(types.ServerID("gs-B")))
 	require.NoError(t, zo.Claim("z1", types.ServerID("gs-A")))
-	reg.svr[types.ServerID("gs-A")].LastBeat = time.Now().Add(-20 * time.Second)
+	reg.svr[types.ServerID("gs-A")].LastHeartbeat = time.Now().Add(-20 * time.Second)
 
 	var reassigned []string
 	s := NewSweeper(reg, zo, SweeperConfig{Interval: time.Second, MissThreshold: 15 * time.Second},
@@ -36,7 +36,7 @@ func TestSweeper_MarksShutdownAfterMissedHeartbeats(t *testing.T) {
 func TestSweeper_LeavesHealthyServersAlone(t *testing.T) {
 	reg := NewServerRegistry()
 	zo := NewZoneOwnership()
-	require.NoError(t, reg.Register(&ServerInfo{ID: types.ServerID("gs-A"), Host: "a", Port: 9000, MaxZones: 10}))
+	require.NoError(t, reg.Register(&NodeDescriptor{NodeID: types.ServerID("gs-A"), Host: "a", Port: 9000, Capacity: NodeCapacity{MaxZones: 10}}))
 	require.NoError(t, reg.Heartbeat(types.ServerID("gs-A")))
 	require.NoError(t, zo.Claim("z1", types.ServerID("gs-A")))
 

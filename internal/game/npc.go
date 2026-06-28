@@ -111,3 +111,14 @@ type NPCLifecycle struct {
 	entity.BaseLifecycle
 	Behavior Behavior
 }
+
+// OnSimulate steps the entity's autonomous behavior. The simulation loop
+// invokes this via the generic Lifecycle contract; it never type-switches on
+// NPCLifecycle, so new autonomous lifecycles can be added without modifying
+// the simulation core.
+func (n *NPCLifecycle) OnSimulate(e *entity.Entity, dt time.Duration) {
+	if n.Behavior == nil {
+		return
+	}
+	n.Behavior.Step(e, dt)
+}

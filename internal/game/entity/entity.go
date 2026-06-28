@@ -13,18 +13,18 @@ type Lifecycle interface {
 	Despawn()
 	OnEnterZone(zoneID types.ZoneID)
 	OnLeaveZone(zoneID types.ZoneID)
-	OnSimulate(dt time.Duration)
+	OnSimulate(e *Entity, dt time.Duration)
 	OnAction(action string, payload []byte)
 }
 
 type BaseLifecycle struct{}
 
-func (BaseLifecycle) Spawn()                      {}
-func (BaseLifecycle) Despawn()                    {}
-func (BaseLifecycle) OnEnterZone(types.ZoneID)    {}
-func (BaseLifecycle) OnLeaveZone(types.ZoneID)    {}
-func (BaseLifecycle) OnSimulate(time.Duration)    {}
-func (BaseLifecycle) OnAction(string, []byte)     {}
+func (BaseLifecycle) Spawn()                       {}
+func (BaseLifecycle) Despawn()                     {}
+func (BaseLifecycle) OnEnterZone(types.ZoneID)     {}
+func (BaseLifecycle) OnLeaveZone(types.ZoneID)     {}
+func (BaseLifecycle) OnSimulate(*Entity, time.Duration) {}
+func (BaseLifecycle) OnAction(string, []byte)      {}
 
 type Entity struct {
 	ID        types.EntityID
@@ -33,9 +33,8 @@ type Entity struct {
 	Rotation  types.Rotation
 	Attrs     Attributes
 	ZoneID    types.ZoneID
-	OwnerID   types.ServerID
+	OwnerID   types.OwnerID
 	RuntimeID types.RuntimeID
-	Behavior  string
 	Lifecycle Lifecycle
 }
 

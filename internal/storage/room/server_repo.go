@@ -17,19 +17,19 @@ type ServerRepository struct{ pool *pgxpool.Pool }
 
 func NewServerRepository(pool *pgxpool.Pool) *ServerRepository { return &ServerRepository{pool: pool} }
 
-func (r *ServerRepository) Register(ctx context.Context, info *room.ServerInfo) error {
+func (r *ServerRepository) Register(ctx context.Context, info *room.NodeDescriptor) error {
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO game_servers (id, host, port, status, max_zones, registered_at, last_heartbeat)
 		 VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
 		 ON CONFLICT (id) DO UPDATE SET host=EXCLUDED.host, port=EXCLUDED.port, max_zones=EXCLUDED.max_zones`,
-		info.ID, info.Host, info.Port, info.Status.String(), info.MaxZones)
+		info.NodeID, info.Host, info.Port, info.Status.String(), info.Capacity.MaxZones)
 	if err != nil {
-		return fmt.Errorf("register server %s: %w", info.ID, err)
+		return fmt.Errorf("register server %s: %w", info.NodeID, err)
 	}
 	return nil
 }
 
-func (r *ServerRepository) Heartbeat(ctx context.Context, id types.ServerID) error {
+func (r *ServerRepository) Heartbeat(ctx context.Context, id types.ServerID, _ room.NodeLoad) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE game_servers SET status='active', last_heartbeat=NOW() WHERE id=$1`, id)
 	if err != nil {
@@ -41,16 +41,29 @@ func (r *ServerRepository) Heartbeat(ctx context.Context, id types.ServerID) err
 	return nil
 }
 
-func (r *ServerRepository) Get(ctx context.Context, id types.ServerID) (*room.ServerInfo, error) {
+func (r *ServerRepository) Get(ctx context.Context, id types.ServerID) (*room.NodeDescriptor, error) {
 	row := r.pool.QueryRow(ctx, `SELECT id,host,port,status,max_zones FROM game_servers WHERE id=$1`, id)
 	return scanServer(row)
 }
 
-func (r *ServerRepository) LeastLoaded(ctx context.Context) (*room.ServerInfo, error) {
-	row := r.pool.QueryRow(ctx,
-		`SELECT id,host,port,status,max_zones FROM game_servers WHERE status='active'
-		 ORDER BY (SELECT COUNT(*) FROM zones WHERE zones.server_id=game_servers.id) ASC LIMIT 1`)
-	return scanServer(row)
+func (r *ServerRepository) List(ctx context.Context) ([]*room.NodeDescriptor, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id,host,port,status,max_zones FROM game_servers WHERE status='active'`)
+	if err != nil {
+		return nil, fmt.Errorf("list servers: %w", err)
+	}
+	defer rows.Close()
+	var out []*room.NodeDescriptor
+	for rows.Next() {
+		var info room.NodeDescriptor
+		var statusStr string
+		if err := rows.Scan(&info.NodeID, &info.Host, &info.Port, &statusStr, &info.Capacity.MaxZones); err != nil {
+			return nil, err
+		}
+		info.Status = types.ServerStatusActive
+		out = append(out, &info)
+	}
+	return out, nil
 }
 
 func (r *ServerRepository) Remove(ctx context.Context, id types.ServerID) error {
@@ -61,16 +74,16 @@ func (r *ServerRepository) Remove(ctx context.Context, id types.ServerID) error 
 	return nil
 }
 
-func scanServer(row pgx.Row) (*room.ServerInfo, error) {
-	var info room.ServerInfo
+func scanServer(row pgx.Row) (*room.NodeDescriptor, error) {
+	var info room.NodeDescriptor
 	var statusStr string
-	if err := row.Scan(&info.ID, &info.Host, &info.Port, &statusStr, &info.MaxZones); err != nil {
+	if err := row.Scan(&info.NodeID, &info.Host, &info.Port, &statusStr, &info.Capacity.MaxZones); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("server: %w", types.ErrNotFound)
 		}
 		return nil, err
 	}
 	info.Status = types.ServerStatusActive
-	info.LastBeat = time.Now()
+	info.LastHeartbeat = time.Now()
 	return &info, nil
 }

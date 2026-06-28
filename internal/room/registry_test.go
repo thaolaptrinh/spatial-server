@@ -11,30 +11,30 @@ import (
 
 func TestServerRegistry_Register(t *testing.T) {
 	reg := NewServerRegistry()
-	svr := &ServerInfo{ID: "gs-1", Host: "localhost", Port: 9001, Status: types.ServerStatusJoining}
+	svr := &NodeDescriptor{NodeID: "gs-1", Host: "localhost", Port: 9001, Status: types.ServerStatusJoining}
 	err := reg.Register(svr)
 	assert.NoError(t, err)
 
 	got, ok := reg.Get("gs-1")
 	assert.True(t, ok)
-	assert.Equal(t, types.ServerID("gs-1"), got.ID)
+	assert.Equal(t, types.ServerID("gs-1"), got.NodeID)
 }
 
 func TestServerRegistry_RegisterDuplicate(t *testing.T) {
 	reg := NewServerRegistry()
-	reg.Register(&ServerInfo{ID: "gs-1", Host: "localhost", Port: 9001})
-	err := reg.Register(&ServerInfo{ID: "gs-1", Host: "other", Port: 9002})
+	reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "localhost", Port: 9001})
+	err := reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "other", Port: 9002})
 	assert.Error(t, err)
 }
 
 func TestServerRegistry_Heartbeat(t *testing.T) {
 	reg := NewServerRegistry()
-	reg.Register(&ServerInfo{ID: "gs-1", Host: "localhost", Port: 9001})
+	reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "localhost", Port: 9001})
 	err := reg.Heartbeat("gs-1")
 	assert.NoError(t, err)
 
 	svr, _ := reg.Get("gs-1")
-	assert.True(t, svr.LastBeat.After(time.Now().Add(-time.Second)))
+	assert.True(t, svr.LastHeartbeat.After(time.Now().Add(-time.Second)))
 }
 
 func TestServerRegistry_HeartbeatNotFound(t *testing.T) {
@@ -45,19 +45,19 @@ func TestServerRegistry_HeartbeatNotFound(t *testing.T) {
 
 func TestServerRegistry_LeastLoaded(t *testing.T) {
 	reg := NewServerRegistry()
-	reg.Register(&ServerInfo{ID: "gs-1", Host: "localhost", Port: 9001, ZoneCount: 5, MaxZones: 10, Status: types.ServerStatusActive})
-	reg.Register(&ServerInfo{ID: "gs-2", Host: "localhost", Port: 9002, ZoneCount: 2, MaxZones: 10, Status: types.ServerStatusActive})
-	reg.Register(&ServerInfo{ID: "gs-3", Host: "localhost", Port: 9003, ZoneCount: 8, MaxZones: 10, Status: types.ServerStatusActive})
+	reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "localhost", Port: 9001, Load: NodeLoad{ZoneCount: 5}, Capacity: NodeCapacity{MaxZones: 10}, Status: types.ServerStatusActive})
+	reg.Register(&NodeDescriptor{NodeID: "gs-2", Host: "localhost", Port: 9002, Load: NodeLoad{ZoneCount: 2}, Capacity: NodeCapacity{MaxZones: 10}, Status: types.ServerStatusActive})
+	reg.Register(&NodeDescriptor{NodeID: "gs-3", Host: "localhost", Port: 9003, Load: NodeLoad{ZoneCount: 8}, Capacity: NodeCapacity{MaxZones: 10}, Status: types.ServerStatusActive})
 
 	svr, ok := reg.LeastLoaded()
 	assert.True(t, ok)
-	assert.Equal(t, types.ServerID("gs-2"), svr.ID)
+	assert.Equal(t, types.ServerID("gs-2"), svr.NodeID)
 }
 
 func TestServerRegistry_LeastLoadedSkipsInactive(t *testing.T) {
 	reg := NewServerRegistry()
-	reg.Register(&ServerInfo{ID: "gs-1", Host: "localhost", Port: 9001, ZoneCount: 1, MaxZones: 10, Status: types.ServerStatusJoining})
-	reg.Register(&ServerInfo{ID: "gs-2", Host: "localhost", Port: 9002, ZoneCount: 1, MaxZones: 10, Status: types.ServerStatusDraining})
+	reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "localhost", Port: 9001, Load: NodeLoad{ZoneCount: 1}, Capacity: NodeCapacity{MaxZones: 10}, Status: types.ServerStatusJoining})
+	reg.Register(&NodeDescriptor{NodeID: "gs-2", Host: "localhost", Port: 9002, Load: NodeLoad{ZoneCount: 1}, Capacity: NodeCapacity{MaxZones: 10}, Status: types.ServerStatusDraining})
 
 	_, ok := reg.LeastLoaded()
 	assert.False(t, ok)
@@ -102,20 +102,20 @@ func TestLookupZone(t *testing.T) {
 	reg := NewServerRegistry()
 	zo := NewZoneOwnership()
 
-	reg.Register(&ServerInfo{ID: "gs-1", Host: "192.168.1.1", Port: 9001, Status: types.ServerStatusActive})
+	reg.Register(&NodeDescriptor{NodeID: "gs-1", Host: "192.168.1.1", Port: 9001, Status: types.ServerStatusActive})
 	zo.Claim("zone-42", "gs-1")
 
-	serverID, host, port, err := ResolveZone(zo, reg, "zone-42")
+	serverID, addr, err := ResolveZone(zo, reg, "zone-42")
 	assert.NoError(t, err)
 	assert.Equal(t, types.ServerID("gs-1"), serverID)
-	assert.Equal(t, "192.168.1.1", host)
-	assert.Equal(t, 9001, port)
+	assert.Contains(t, addr, "192.168.1.1")
+	assert.Contains(t, addr, "9001")
 }
 
 func TestLookupZone_NotFound(t *testing.T) {
 	reg := NewServerRegistry()
 	zo := NewZoneOwnership()
 
-	_, _, _, err := ResolveZone(zo, reg, "non-existent-zone")
+	_, _, err := ResolveZone(zo, reg, "non-existent-zone")
 	assert.Error(t, err)
 }

@@ -9,51 +9,63 @@ import (
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
-type ServerInfo struct {
-	ID        types.ServerID
-	Host      string
-	Port      int
-	Status    types.ServerStatus
-	MaxZones  int
-	ZoneCount int
-	LastBeat  time.Time
-}
-
 type ServerRegistry struct {
 	mu  sync.RWMutex
-	svr map[types.ServerID]*ServerInfo
+	svr map[types.ServerID]*NodeDescriptor
 }
 
 func NewServerRegistry() *ServerRegistry {
-	return &ServerRegistry{svr: make(map[types.ServerID]*ServerInfo)}
+	return &ServerRegistry{svr: make(map[types.ServerID]*NodeDescriptor)}
 }
 
-func (r *ServerRegistry) Register(info *ServerInfo) error {
+// Register records a Runtime Node described by its NodeDescriptor. Identity is
+// the NodeID; re-registering an existing NodeID is a conflict. The node becomes
+// active after its first heartbeat (not on registration), so a node that
+// registers but never heartbeats is never a scheduling candidate.
+func (r *ServerRegistry) Register(info *NodeDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.svr[info.ID]; exists {
-		return fmt.Errorf("server %s: %w", info.ID, types.ErrConflict)
+	if _, exists := r.svr[info.NodeID]; exists {
+		return fmt.Errorf("node %s: %w", info.NodeID, types.ErrConflict)
 	}
-	info.LastBeat = time.Now()
-	r.svr[info.ID] = info
+	info.LastHeartbeat = time.Now()
+	if info.StartTime.IsZero() {
+		info.StartTime = time.Now()
+	}
+	r.svr[info.NodeID] = info
 	return nil
 }
 
-func (r *ServerRegistry) Get(id types.ServerID) (*ServerInfo, bool) {
+func (r *ServerRegistry) Get(id types.ServerID) (*NodeDescriptor, bool) {
 	r.mu.RLock()
 	s, ok := r.svr[id]
 	r.mu.RUnlock()
 	return s, ok
 }
 
+// Heartbeat records liveness for a node.
 func (r *ServerRegistry) Heartbeat(id types.ServerID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	s, ok := r.svr[id]
 	if !ok {
-		return fmt.Errorf("server %s: %w", id, types.ErrNotFound)
+		return fmt.Errorf("node %s: %w", id, types.ErrNotFound)
 	}
-	s.LastBeat = time.Now()
+	s.LastHeartbeat = time.Now()
+	s.Status = types.ServerStatusActive
+	return nil
+}
+
+// UpdateLoad records scheduling-relevant load reported by a node heartbeat.
+func (r *ServerRegistry) UpdateLoad(id types.ServerID, load NodeLoad) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.svr[id]
+	if !ok {
+		return fmt.Errorf("node %s: %w", id, types.ErrNotFound)
+	}
+	s.Load = load
+	s.LastHeartbeat = time.Now()
 	s.Status = types.ServerStatusActive
 	return nil
 }
@@ -64,25 +76,28 @@ func (r *ServerRegistry) Remove(id types.ServerID) {
 	delete(r.svr, id)
 }
 
-func (r *ServerRegistry) LeastLoaded() (*ServerInfo, bool) {
+// List returns all registered node descriptors (allocator candidates).
+func (r *ServerRegistry) List() []*NodeDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var best *ServerInfo
-	for _, s := range r.svr {
-		if s.Status != types.ServerStatusActive {
-			continue
-		}
-		if s.ZoneCount >= s.MaxZones {
-			continue
-		}
-		if best == nil || s.ZoneCount < best.ZoneCount {
-			best = s
-		}
+	out := make([]*NodeDescriptor, 0, len(r.svr))
+	for _, n := range r.svr {
+		out = append(out, n)
 	}
-	if best == nil {
+	return out
+}
+
+// allocator is the default scheduling policy used by LeastLoaded.
+var defaultAllocator Allocator = LeastLoadedAllocator{}
+
+// LeastLoaded selects a node using the default allocator. Returns the node and
+// whether one was found.
+func (r *ServerRegistry) LeastLoaded() (*NodeDescriptor, bool) {
+	n, err := defaultAllocator.Select(r.List())
+	if err != nil {
 		return nil, false
 	}
-	return best, true
+	return n, true
 }
 
 type ZoneOwnership struct {
@@ -165,14 +180,15 @@ func (f *WatcherFanout) Broadcast(change *spatialserverv1.OwnershipChange) {
 	}
 }
 
-func ResolveZone(zo *ZoneOwnership, reg *ServerRegistry, zoneID string) (types.ServerID, string, int, error) {
+// ResolveZone returns the server ID and routable address of a zone's owner.
+func ResolveZone(zo *ZoneOwnership, reg *ServerRegistry, zoneID string) (types.ServerID, string, error) {
 	serverID, ok := zo.Lookup(zoneID)
 	if !ok {
-		return "", "", 0, fmt.Errorf("zone %s: %w", zoneID, types.ErrNotFound)
+		return "", "", fmt.Errorf("zone %s: %w", zoneID, types.ErrNotFound)
 	}
 	info, ok := reg.Get(serverID)
 	if !ok {
-		return "", "", 0, fmt.Errorf("server %s: %w", serverID, types.ErrNotFound)
+		return "", "", fmt.Errorf("node %s: %w", serverID, types.ErrNotFound)
 	}
-	return serverID, info.Host, info.Port, nil
+	return serverID, info.Address(), nil
 }

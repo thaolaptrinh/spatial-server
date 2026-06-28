@@ -11,7 +11,7 @@ This directory is the single source of truth for the Spatial Server platform. Ev
 | Directory | Purpose |
 |-----------|---------|
 | [architecture/](architecture/) | System architecture, principles, context, service boundaries, communication matrix, runtime model, component interaction, scaling, data model, AOI, deployment topology, repository structure, performance budgets |
-| [adr/](adr/) | Architecture Decision Records (001–023) |
+| [adr/](adr/) | Architecture Decision Records (001–026) |
 | [standards/](standards/) | Coding, naming, dependency rules, error handling, logging, versioning, configuration, metrics, API / gRPC / protobuf conventions |
 | [development/](development/) | Local dev setup, contribution guide, branch strategy, release process |
 | [testing/](testing/) | Testing strategy, unit/integration/load/simulation/chaos testing, benchmark scenarios |

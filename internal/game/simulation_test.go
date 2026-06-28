@@ -22,7 +22,7 @@ func TestNewGame(t *testing.T) {
 	assert.NotNil(t, g.Entities)
 	assert.NotNil(t, g.Zones)
 	assert.NotNil(t, g.Inbox)
-	assert.NotNil(t, g.Outbox)
+	assert.NotNil(t, g.Events)
 }
 
 func TestAddEntity(t *testing.T) {
@@ -125,7 +125,7 @@ func TestEntitiesNearGrid_ReturnsEntitiesInMatchingZone(t *testing.T) {
 	far.Position = types.Vector3{X: 5000, Z: 5000}
 	g.AddEntity(far)
 
-	got := g.EntitiesNearGrid(0, 0, 200)
+	got := g.EntitiesNearGrid(types.RuntimeID("r1"), 0, 0, 200)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.EntityID("near"), got[0].ID)
 }
@@ -139,7 +139,51 @@ func TestEntitiesNearGrid_NoMatchingGridReturnsNil(t *testing.T) {
 	e.Position = types.Vector3{X: 50, Z: 50}
 	g.AddEntity(e)
 
-	assert.Nil(t, g.EntitiesNearGrid(9, 9, 200))
+	assert.Nil(t, g.EntitiesNearGrid(types.RuntimeID("r1"), 9, 9, 200))
+}
+
+func TestSpaceIsolation_EntitiesNearGridDoesNotCrossSpaces(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	// Two distinct Spaces, each with a zone at the same grid coordinate (0,0).
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("za"), types.RuntimeID("spaceA"), 0, 0, 100)))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("zb"), types.RuntimeID("spaceB"), 0, 0, 100)))
+
+	a := entity.New(types.EntityID("ea"), "avatar", types.RuntimeID("spaceA"))
+	a.ZoneID = types.ZoneID("za")
+	a.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(a)
+
+	b := entity.New(types.EntityID("eb"), "avatar", types.RuntimeID("spaceB"))
+	b.ZoneID = types.ZoneID("zb")
+	b.Position = types.Vector3{X: 50, Z: 50}
+	g.AddEntity(b)
+
+	// Querying spaceA at (0,0) must return only the spaceA entity, even
+	// though spaceB has an entity at the same grid coordinate and position.
+	gotA := g.EntitiesNearGrid(types.RuntimeID("spaceA"), 0, 0, 200)
+	require.Len(t, gotA, 1)
+	assert.Equal(t, types.EntityID("ea"), gotA[0].ID)
+
+	gotB := g.EntitiesNearGrid(types.RuntimeID("spaceB"), 0, 0, 200)
+	require.Len(t, gotB, 1)
+	assert.Equal(t, types.EntityID("eb"), gotB[0].ID)
+}
+
+func TestSpaceIsolation_EntitySpaceDerivedFromZone(t *testing.T) {
+	g := New(types.ServerID("gs-1"))
+	require.NoError(t, g.AssignZone(zone.New(types.ZoneID("z1"), types.RuntimeID("spaceX"), 0, 0, 100)))
+
+	// MigrateEntityIn and snapshot load previously created entities with an
+	// empty Space. The entity's Space must now be derived from its zone so it
+	// is bound to the correct Space regardless of caller-supplied input.
+	g.MigrateEntityIn(&v1.EntitySnapshot{
+		EntityId: "em", Type: "avatar",
+		Position: &v1.Vector3{X: 10, Z: 10},
+	}, types.ZoneID("z1"))
+
+	e, ok := g.Entities[types.EntityID("em")]
+	require.True(t, ok)
+	assert.Equal(t, types.RuntimeID("spaceX"), e.RuntimeID)
 }
 
 func TestInboxSend(t *testing.T) {
@@ -255,12 +299,12 @@ func TestTick_EntityInRangeSpawns(t *testing.T) {
 	g.AddEntity(eB)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	drain := make(chan OutboundPacket, 100)
+	drain := make(chan Event, 100)
 	go func() {
 		for {
 			select {
-			case pkt := <-g.Outbox:
-				drain <- pkt
+			case evt := <-g.Events:
+				drain <- evt
 			case <-ctx.Done():
 				return
 			}
@@ -273,8 +317,8 @@ func TestTick_EntityInRangeSpawns(t *testing.T) {
 	var foundSpawn bool
 	for {
 		select {
-		case pkt := <-drain:
-			if pkt.ClientID == "a" && len(pkt.Data) > 0 {
+		case evt := <-drain:
+			if evt.Kind == EventSpawn && evt.Observer == types.EntityID("a") && evt.EntityID == types.EntityID("b") {
 				foundSpawn = true
 			}
 		case <-time.After(100 * time.Millisecond):
@@ -357,11 +401,11 @@ func TestDispatch_DecodesPositionUpdateProto(t *testing.T) {
 	g.mu.Unlock()
 }
 
-func TestOutbox_DropOnFull(t *testing.T) {
+func TestEvents_DropOnFull(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
-	for i := 0; i < 4096; i++ {
+	for i := 0; i < InboxBufferSize; i++ {
 		select {
-		case g.Outbox <- OutboundPacket{ClientID: "c", Data: []byte("x")}:
+		case g.Events <- Event{Kind: EventSpawn, Observer: types.EntityID("c")}:
 		default:
 			t.Log("buffer full at", i)
 		}
@@ -380,7 +424,7 @@ func TestOutbox_DropOnFull(t *testing.T) {
 func TestDispatch_EntityAction_RoutesToLifecycle(t *testing.T) {
 	g := New(types.ServerID("s1"))
 	e := entity.New(types.EntityID("p1"), "avatar", types.RuntimeID("r1"))
-	e.OwnerID = types.ServerID("p1")
+	e.OwnerID = types.OwnerID("p1")
 	rec := &actionRecorder{}
 	e.Lifecycle = rec
 	g.AddEntity(e)
@@ -399,7 +443,7 @@ type actionRecorder struct {
 
 func (a *actionRecorder) OnAction(s string, _ []byte) { a.lastAction = s }
 
-func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
+func TestOutbound_EmitsSpawnEvent(t *testing.T) {
 	g := New(types.ServerID("gs-1"))
 	e := entity.New(types.EntityID("npc1"), "npc", types.RuntimeID("r1"))
 	e.Position = types.Vector3{X: 50, Z: 50}
@@ -411,22 +455,14 @@ func TestOutbound_EncodesSpawnAsProto(t *testing.T) {
 
 	g.tick()
 
-	for len(g.Outbox) > 0 {
-		pkt := <-g.Outbox
-		_, id, payload, _, _, err := protocol.Decode(pkt.Data)
-		require.NoError(t, err)
-
-		if id == protocol.PacketIDEntitySpawn {
-			var snap v1.EntitySnapshot
-			err = proto.Unmarshal(payload, &snap)
-			require.NoError(t, err)
-			if snap.GetEntityId() == "npc1" {
-				assert.Equal(t, "npc", snap.GetType())
-				assert.Equal(t, 50.0, snap.GetPosition().GetX())
-				assert.Equal(t, 50.0, snap.GetPosition().GetZ())
-				return
-			}
+	for len(g.Events) > 0 {
+		evt := <-g.Events
+		if evt.Kind == EventSpawn && evt.EntityID == types.EntityID("npc1") {
+			assert.Equal(t, "npc", evt.Type)
+			assert.Equal(t, 50.0, evt.Position.X)
+			assert.Equal(t, 50.0, evt.Position.Z)
+			return
 		}
 	}
-	t.Error("never received a spawn packet for npc1")
+	t.Error("never received a spawn event for npc1")
 }

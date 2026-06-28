@@ -77,7 +77,7 @@ func startStack(t *testing.T) *stack {
 
 	root := moduleRoot()
 	require.NotEmpty(t, root)
-	require.NoError(t, migration.Run(pool, filepath.Join(root, "pkg", "storage", "migrations")))
+	require.NoError(t, migration.Run(pool, filepath.Join(root, "internal", "storage", "migrations")))
 
 	cleanup := func() {
 		pgC.Terminate(ctx)

@@ -10,6 +10,6 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /room-service .
 COPY configs/ configs/
-COPY pkg/storage/migrations/ pkg/storage/migrations/
+COPY internal/storage/migrations/ internal/storage/migrations/
 EXPOSE 9000
 CMD ["./room-service"]

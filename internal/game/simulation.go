@@ -24,14 +24,23 @@ const (
 	DefaultAOIRadius = 300.0
 	cmdChannelBuffer = 256
 	DefaultZoneID    = types.ZoneID("default")
+
+	// maxPacketsPerTick caps inbound processing per tick so a packet burst
+	// cannot blow the tick budget and cause cascading overload. Remaining
+	// packets are processed on subsequent ticks.
+	maxPacketsPerTick = 1024
+	// maxTickDelta caps the simulated delta after a pause (e.g. GC stall, cold
+	// start) to prevent a spiral-of-death where a long dt causes a long tick
+	// which causes an even longer dt.
+	maxTickDelta = 250 * time.Millisecond
+	// cmdEnqueueTimeout is how long a control-plane command (entity add/remove)
+	// blocks waiting for queue space before it is dropped loudly. Control
+	// commands must never be silently dropped: a drop indicates the tick loop
+	// is stalled and is logged + counted.
+	cmdEnqueueTimeout = 100 * time.Millisecond
 )
 
 type InboundPacket struct {
-	ClientID string
-	Data     []byte
-}
-
-type OutboundPacket struct {
 	ClientID string
 	Data     []byte
 }
@@ -83,7 +92,7 @@ type Game struct {
 	peers         *PeerRegistry
 	peerZone      map[types.ZoneID]types.ServerID
 	Inbox         chan InboundPacket
-	Outbox        chan OutboundPacket
+	Events        chan Event
 	aoiRadius     float64
 	tickRate      time.Duration
 	ghostTTL      time.Duration
@@ -96,7 +105,8 @@ type Game struct {
 	sessionStates   map[types.EntityID]*sessionState
 	reconnectWindow time.Duration
 	lifecycleClock  func() time.Time
-	deltaBuffers    map[types.EntityID]*DeltaRingBuffer
+	metrics         Metrics
+	lastTickAt      time.Time
 }
 
 type Option func(*Game)
@@ -122,7 +132,7 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		peers:      NewPeerRegistry(),
 		peerZone:   make(map[types.ZoneID]types.ServerID),
 		Inbox:      make(chan InboundPacket, InboxBufferSize),
-		Outbox:     make(chan OutboundPacket, InboxBufferSize),
+		Events:     make(chan Event, InboxBufferSize),
 		aoiRadius:  DefaultAOIRadius,
 		tickRate:   DefaultTickRate,
 		ghostTTL:   5 * time.Second,
@@ -131,7 +141,7 @@ func New(sid types.ServerID, opts ...Option) *Game {
 		sessionStates:   make(map[types.EntityID]*sessionState),
 		reconnectWindow: 30 * time.Second,
 		lifecycleClock:  time.Now,
-		deltaBuffers:    make(map[types.EntityID]*DeltaRingBuffer),
+		metrics:         NoopMetrics{},
 	}
 	for _, opt := range opts {
 		opt(g)
@@ -221,6 +231,14 @@ func (g *Game) addEntity(e *entity.Entity) {
 		}
 		g.Zones[zid] = sim
 	}
+	// Enforce Space isolation: an entity's Space is always the Space of its
+	// zone. This is the single source of truth for Space membership and
+	// guarantees entities from different Spaces can never share state, even
+	// when zones overlap by grid coordinate. Migration and snapshot load rely
+	// on this derivation rather than trusting caller-supplied IDs.
+	if sim.zone != nil && sim.zone.RuntimeID != "" {
+		e.RuntimeID = sim.zone.RuntimeID
+	}
 	g.Entities[e.ID] = e
 	g.entityZone[e.ID] = zid
 	sim.entities[e.ID] = e
@@ -257,13 +275,20 @@ func (g *Game) EntityCount() int {
 	return len(g.Entities)
 }
 
-func (g *Game) EntitiesNearGrid(gridX, gridY int, radius float64) []*entity.Entity {
+// EntitiesNearGrid returns entities within radius of the given grid cell,
+// scoped to a single Space. The Space parameter is mandatory: grid
+// coordinates are relative per-Space, so without it the query would be
+// ambiguous and could mix entities from different Spaces.
+func (g *Game) EntitiesNearGrid(space types.RuntimeID, gridX, gridY int, radius float64) []*entity.Entity {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	var result []*entity.Entity
 	radiusSq := radius * radius
 	for _, sim := range g.Zones {
-		if sim.zone == nil || sim.zone.Grid.X != gridX || sim.zone.Grid.Y != gridY {
+		if sim.zone == nil || sim.zone.RuntimeID != space {
+			continue
+		}
+		if sim.zone.Grid.X != gridX || sim.zone.Grid.Y != gridY {
 			continue
 		}
 		size := sim.zone.Size
@@ -298,17 +323,30 @@ func (g *Game) Run(ctx context.Context) error {
 	}
 }
 
+// Tick runs a single simulation tick. It enables step-mode driving for
+// benchmarks and deterministic replay (the production loop uses Run, which is
+// wall-clock driven).
+func (g *Game) Tick() { g.tick() }
+
 func (g *Game) EnqueueAddEntity(e *entity.Entity) {
-	select {
-	case g.cmds <- func() { g.addEntity(e) }:
-	default:
-	}
+	g.enqueueCmd(func() { g.addEntity(e) }, "cmds_add")
 }
 
 func (g *Game) EnqueueRemoveEntity(id types.EntityID) {
+	g.enqueueCmd(func() { g.removeEntity(id) }, "cmds_remove")
+}
+
+// enqueueCmd submits a control-plane command. Unlike data-plane packets,
+// control commands block briefly for queue space and are never dropped
+// silently: a drop is logged and counted as it indicates a stalled tick loop.
+func (g *Game) enqueueCmd(fn func(), label string) {
+	timer := time.NewTimer(cmdEnqueueTimeout)
+	defer timer.Stop()
 	select {
-	case g.cmds <- func() { g.removeEntity(id) }:
-	default:
+	case g.cmds <- fn:
+	case <-timer.C:
+		g.metrics.Dropped(label, 1)
+		slog.Warn("control command dropped: command queue full", slog.String("queue", label))
 	}
 }
 
@@ -324,25 +362,79 @@ func (g *Game) applyCmds() {
 }
 
 func (g *Game) tick() {
+	now := g.lifecycleClock()
+	if g.lastTickAt.IsZero() {
+		g.lastTickAt = now
+	}
+	dt := now.Sub(g.lastTickAt)
+	g.lastTickAt = now
+	if dt > maxTickDelta {
+		dt = maxTickDelta
+	}
+
 	g.applyCmds()
+
+	// Bounded inbound drain: process at most maxPacketsPerTick packets per
+	// tick so a burst cannot blow the tick budget. The rest wait until the
+	// next tick (bounded by the Inbox channel capacity, drops counted by the
+	// relay that enqueues them).
+	processed := 0
+drain:
 	for {
 		select {
 		case pkt := <-g.Inbox:
 			g.dispatch(pkt)
+			processed++
+			if processed >= maxPacketsPerTick {
+				break drain
+			}
 		default:
-			g.tickCount++
-			if g.snapshotter != nil && g.snapshotEvery > 0 && g.tickCount%int64(g.snapshotEvery) == 0 {
-				g.snapshotAllZones()
-			}
-			g.simulate(g.tickRate)
-			zids := g.zoneIDs()
-			for _, zid := range zids {
-				g.detectZoneBoundaries(zid)
-				g.updateVisibility(zid)
-			}
-			g.sweepGhosts()
-			return
+			break drain
 		}
+	}
+
+	g.tickCount++
+	if g.snapshotter != nil && g.snapshotEvery > 0 && g.tickCount%int64(g.snapshotEvery) == 0 {
+		g.snapshotAllZones()
+	}
+	g.simulate(dt)
+	zids := g.zoneIDs()
+	for _, zid := range zids {
+		g.detectZoneBoundaries(zid)
+		g.updateVisibility(zid)
+	}
+	g.sweepGhosts()
+
+	elapsed := g.lifecycleClock().Sub(now)
+	g.metrics.TickDuration(elapsed)
+	if elapsed > g.tickRate {
+		g.metrics.TickOverrun()
+	}
+	g.reportGauges()
+}
+
+// reportGauges emits the per-tick gauge snapshot: queue depths, active
+// spaces, and entity counts by type.
+func (g *Game) reportGauges() {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	g.metrics.QueueDepth("inbox", len(g.Inbox))
+	g.metrics.QueueDepth("events", len(g.Events))
+	g.metrics.QueueDepth("cmds", len(g.cmds))
+
+	entitiesByType := make(map[string]int, 8)
+	spaces := make(map[types.RuntimeID]struct{})
+	for _, e := range g.Entities {
+		entitiesByType[e.Type]++
+	}
+	for _, sim := range g.Zones {
+		if sim.zone != nil && sim.zone.RuntimeID != "" {
+			spaces[sim.zone.RuntimeID] = struct{}{}
+		}
+	}
+	g.metrics.ActiveSpaces(len(spaces))
+	for typ, n := range entitiesByType {
+		g.metrics.EntityCount(typ, n)
 	}
 }
 
@@ -368,7 +460,7 @@ func (g *Game) snapshotAllZones() {
 			rows = append(rows, map[string]any{
 				"id":       string(e.ID),
 				"type":     e.Type,
-				"behavior": e.Behavior,
+				"behavior": string(e.Attrs["behavior"]),
 				"x":        e.Position.X,
 				"y":        e.Position.Y,
 				"z":        e.Position.Z,
@@ -459,28 +551,27 @@ func (g *Game) updateVisibility(zid types.ZoneID) {
 
 		for id := range currentSet {
 			if _, seen := state.visible[id]; !seen && id != e.ID {
-				other, ok := g.Entities[id]
-				if ok {
-					select {
-					case g.Outbox <- OutboundPacket{
-						ClientID: string(e.ID),
-						Data:     encodeSpawnFrame(other),
-					}:
-					default:
-					}
+				if other, ok := g.Entities[id]; ok {
+					g.publish(Event{
+						Kind:     EventSpawn,
+						Space:    e.RuntimeID,
+						Observer: e.ID,
+						EntityID: other.ID,
+						Type:     other.Type,
+						Position: other.Position,
+					})
 				}
 			}
 		}
 
 		for id := range state.visible {
 			if _, still := currentSet[id]; !still {
-				select {
-				case g.Outbox <- OutboundPacket{
-					ClientID: string(e.ID),
-					Data:     encodeDespawnFrame(id),
-				}:
-				default:
-				}
+				g.publish(Event{
+					Kind:     EventDespawn,
+					Space:    e.RuntimeID,
+					Observer: e.ID,
+					EntityID: id,
+				})
 			}
 		}
 
@@ -513,14 +604,10 @@ func (g *Game) dispatch(pkt InboundPacket) {
 				sim.aoi.Move(e.ID, e.Position)
 			}
 		}
-		if buf, ok := g.deltaBuffers[e.ID]; ok {
-			buf.Push(&v1.EntityUpdate{
-				EntityId:  string(e.ID),
-				Position:  &v1.Vector3{X: e.Position.X, Y: e.Position.Y, Z: e.Position.Z},
-				Sequence:  upd.GetSequence(),
-				Timestamp: upd.GetTimestamp(),
-			})
-		}
+		// Replicate the client-driven move to AOI observers. Without this, other
+		// clients never see continuous movement (only spawn/despawn on cell
+		// changes) — the core realtime position-sync path would be broken.
+		g.enqueueMove(e.ID, e.Position)
 	}
 	if id == protocol.PacketIDEntityAction {
 		var act v1.EntityAction
@@ -531,7 +618,7 @@ func (g *Game) dispatch(pkt InboundPacket) {
 		if !ok {
 			return
 		}
-		if e.OwnerID != types.ServerID(pkt.ClientID) {
+		if e.OwnerID != types.OwnerID(pkt.ClientID) {
 			return
 		}
 		if e.Lifecycle != nil {
@@ -555,15 +642,18 @@ func (g *Game) dispatch(pkt InboundPacket) {
 		if sim == nil {
 			return
 		}
-		frame := encodeStateFrame(e.ID, st.GetAnimation(), st.GetHealth())
+		frame := payload
 		for _, obsID := range sim.aoi.EntitiesInRange(e.Position, g.aoiRadius) {
 			if obsID == e.ID {
 				continue
 			}
-			select {
-			case g.Outbox <- OutboundPacket{ClientID: string(obsID), Data: frame}:
-			default:
-			}
+			g.publish(Event{
+				Kind:     EventState,
+				Space:    e.RuntimeID,
+				Observer: obsID,
+				EntityID: e.ID,
+				Payload:  frame,
+			})
 		}
 	}
 }
@@ -572,36 +662,21 @@ func (g *Game) simulate(dt time.Duration) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for id, e := range g.Entities {
-		lc, ok := e.Lifecycle.(*NPCLifecycle)
-		if !ok || lc == nil || lc.Behavior == nil {
+		if e.Lifecycle == nil {
 			continue
 		}
-		if lc.Behavior.Step(e, dt) {
-			if zid, ok := g.entityZone[id]; ok {
-				if sim := g.Zones[zid]; sim != nil {
-					sim.aoi.Move(id, e.Position)
-				}
-			}
-			g.enqueueMove(id, e.Position)
+		prev := e.Position
+		e.Lifecycle.OnSimulate(e, dt)
+		if e.Position == prev {
+			continue
 		}
+		if zid, ok := g.entityZone[id]; ok {
+			if sim := g.Zones[zid]; sim != nil {
+				sim.aoi.Move(id, e.Position)
+			}
+		}
+		g.enqueueMove(id, e.Position)
 	}
-}
-
-func (g *Game) DeltaBufferFor(id types.EntityID) *DeltaRingBuffer {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	b, ok := g.deltaBuffers[id]
-	if !ok {
-		b = NewDeltaRingBuffer(1000)
-		g.deltaBuffers[id] = b
-	}
-	return b
-}
-
-func (g *Game) ForgetDeltaBuffer(id types.EntityID) {
-	g.mu.Lock()
-	delete(g.deltaBuffers, id)
-	g.mu.Unlock()
 }
 
 func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {
@@ -613,14 +688,20 @@ func (g *Game) enqueueMove(id types.EntityID, pos types.Vector3) {
 	if sim == nil {
 		return
 	}
-	frame := encodeMoveFrame(id, pos)
+	space := types.RuntimeID("")
+	if e, ok := g.Entities[id]; ok {
+		space = e.RuntimeID
+	}
 	for _, obsID := range sim.aoi.EntitiesInRange(pos, g.aoiRadius) {
 		if obsID == id {
 			continue
 		}
-		select {
-		case g.Outbox <- OutboundPacket{ClientID: string(obsID), Data: frame}:
-		default:
-		}
+		g.publish(Event{
+			Kind:     EventMove,
+			Space:    space,
+			Observer: obsID,
+			EntityID: id,
+			Position: pos,
+		})
 	}
 }

@@ -23,6 +23,21 @@ type RuntimeID string
 
 type ServerID string
 
+// PlayerID identifies an external participant. It is issued by the Business
+// Backend and carried in the runtime token (player_id claim). The runtime
+// never issues or resolves PlayerIDs; it only carries them.
+type PlayerID string
+
+// OwnerID identifies the controller of an entity. For player-controlled
+// entities it is derived from a PlayerID; for autonomous/environment
+// entities it is empty. OwnerID is deliberately a distinct type from
+// ServerID (a node identity) and PlayerID (a participant identity) so the
+// three identities cannot be accidentally intermixed.
+type OwnerID string
+
+// NewOwnerID binds an entity to the player that controls it.
+func NewOwnerID(p PlayerID) OwnerID { return OwnerID(p) }
+
 type Vector3 struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`

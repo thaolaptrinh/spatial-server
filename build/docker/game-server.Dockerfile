@@ -10,5 +10,6 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /game-server .
 COPY configs/ configs/
+COPY internal/storage/migrations/ internal/storage/migrations/
 EXPOSE 9000
 CMD ["./game-server"]

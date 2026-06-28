@@ -15,9 +15,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thaolaptrinh/spatial-server/internal/types"
 	"github.com/thaolaptrinh/spatial-server/internal/game"
+	"github.com/thaolaptrinh/spatial-server/pkg/protocol"
 	spatialserverv1 "github.com/thaolaptrinh/spatial-server/proto/gen/spatialserver/v1"
 )
 
@@ -126,7 +128,7 @@ func newTestServer(t *testing.T) (*spatialserverv1.GameServer_RelayClient, *game
 	go func() { _ = g.Run(ctx) }()
 
 	srv := grpc.NewServer()
-	gs := newGameServerServer(g)
+	gs := newGameServerServer(g, nil)
 	spatialserverv1.RegisterGameServerServer(srv, gs)
 	lis := bufconn.Listen(bufSize)
 	go srv.Serve(lis) //nolint:errcheck
@@ -196,7 +198,7 @@ func TestRelay_DisconnectRemovesEntity(t *testing.T) {
 
 func TestAssignZoneRPC_CreatesZone(t *testing.T) {
 	g := game.New(types.ServerID("gs-1"))
-	srv := newGameServerServer(g)
+	srv := newGameServerServer(g, nil)
 
 	resp, err := srv.AssignZone(context.Background(), &spatialserverv1.AssignZoneRequest{
 		ZoneId:    "z1",
@@ -212,7 +214,7 @@ func TestAssignZoneRPC_CreatesZone(t *testing.T) {
 
 func TestReleaseZoneRPC_TeardownZone(t *testing.T) {
 	g := game.New(types.ServerID("gs-1"))
-	srv := newGameServerServer(g)
+	srv := newGameServerServer(g, nil)
 	_, _ = srv.AssignZone(context.Background(), &spatialserverv1.AssignZoneRequest{ZoneId: "z1", RuntimeId: "r1"})
 	require.NotNil(t, g.AOIFor(types.ZoneID("z1")))
 
@@ -220,4 +222,35 @@ func TestReleaseZoneRPC_TeardownZone(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.GetSuccess())
 	require.Nil(t, g.AOIFor(types.ZoneID("z1")))
+}
+
+// TestEncodeEvent_ProducesValidWirePackets covers the wire-format encoding
+// that lives in this adapter (the simulation core is wire-format agnostic).
+func TestEncodeEvent_ProducesValidWirePackets(t *testing.T) {
+	data := encodeEvent(game.Event{
+		Kind:     game.EventSpawn,
+		EntityID: types.EntityID("e1"),
+		Type:     "npc",
+		Position: types.Vector3{X: 1, Y: 2, Z: 3},
+	})
+	_, pid, payload, _, _, err := protocol.Decode(data)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.PacketIDEntitySpawn, pid)
+	var snap spatialserverv1.EntitySnapshot
+	require.NoError(t, proto.Unmarshal(payload, &snap))
+	assert.Equal(t, "e1", snap.GetEntityId())
+	assert.Equal(t, "npc", snap.GetType())
+
+	data = encodeEvent(game.Event{Kind: game.EventMove, EntityID: types.EntityID("e1"), Position: types.Vector3{X: 9, Z: 9}})
+	_, pid, _, _, _, err = protocol.Decode(data)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.PacketIDEntityMove, pid)
+
+	// State forwards its opaque payload verbatim; the runtime never interprets it.
+	raw := []byte{0xAB, 0xCD}
+	data = encodeEvent(game.Event{Kind: game.EventState, EntityID: types.EntityID("e1"), Payload: raw})
+	_, pid, payload, _, _, err = protocol.Decode(data)
+	require.NoError(t, err)
+	assert.Equal(t, protocol.PacketIDEntityState, pid)
+	assert.Equal(t, raw, payload)
 }

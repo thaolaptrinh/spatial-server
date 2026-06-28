@@ -31,18 +31,20 @@ import (
 
 type roomServiceServer struct {
 	spatialserverv1.UnimplementedRoomServiceServer
-	servers room.ServerStore
-	zones   room.ZoneStore
-	fanout  *room.WatcherFanout
+	servers   room.ServerStore
+	zones     room.ZoneStore
+	fanout    *room.WatcherFanout
+	allocator room.Allocator
 }
 
 func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.RegisterRequest) (*spatialserverv1.RegisterResponse, error) {
-	err := s.servers.Register(ctx, &room.ServerInfo{
-		ID:       types.ServerID(req.ServerId),
-		Host:     req.Host,
-		Port:     int(req.Port),
-		Status:   types.ServerStatusJoining,
-		MaxZones: int(req.MaxZones),
+	err := s.servers.Register(ctx, &room.NodeDescriptor{
+		NodeID:    types.ServerID(req.ServerId),
+		AdvertiseAddr: req.AdvertiseAddr,
+		Host:      req.Host, Port: int(req.Port),
+		Version:   req.Version, Build: req.Build,
+		Capacity:  room.NodeCapacity{MaxZones: int(req.MaxZones)},
+		Labels:    req.Labels,
 	})
 	if err != nil {
 		return &spatialserverv1.RegisterResponse{Success: false}, nil
@@ -51,7 +53,13 @@ func (s *roomServiceServer) Register(ctx context.Context, req *spatialserverv1.R
 }
 
 func (s *roomServiceServer) Heartbeat(ctx context.Context, req *spatialserverv1.HeartbeatRequest) (*spatialserverv1.HeartbeatResponse, error) {
-	err := s.servers.Heartbeat(ctx, types.ServerID(req.ServerId))
+	err := s.servers.Heartbeat(ctx, types.ServerID(req.NodeId), room.NodeLoad{
+		ActiveEntities: int(req.ActiveEntities),
+		ActiveSpaces:   int(req.ActiveSpaces),
+		ConnectedUsers: int(req.ConnectedUsers),
+		QueueDepth:     int(req.QueueDepth),
+		TickDurationMs: req.TickDurationMs,
+	})
 	if err != nil {
 		return &spatialserverv1.HeartbeatResponse{Acknowledged: false}, nil
 	}
@@ -64,23 +72,25 @@ func (s *roomServiceServer) LookupZone(ctx context.Context, req *spatialserverv1
 		info, err := s.servers.Get(ctx, serverID)
 		if err == nil {
 			return &spatialserverv1.LookupZoneResponse{
-				Server: &spatialserverv1.ServerID{Id: string(info.ID)},
-				Host:   info.Host,
-				Port:   int32(info.Port),
+				Server:        &spatialserverv1.ServerID{Id: string(info.NodeID)},
+				AdvertiseAddr: info.Address(),
 			}, nil
 		}
 	}
-	server, err := s.servers.LeastLoaded(ctx)
+	nodes, err := s.servers.List(ctx)
+	if err != nil || len(nodes) == 0 {
+		return nil, status.Errorf(codes.Unavailable, "no servers available for zone %s", req.ZoneId)
+	}
+	server, err := s.allocator.Select(nodes)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "no servers available for zone %s", req.ZoneId)
 	}
-	if err := s.zones.Claim(ctx, req.ZoneId, "", server.ID); err != nil {
+	if err := s.zones.Claim(ctx, req.ZoneId, "", server.NodeID); err != nil {
 		return nil, status.Errorf(codes.Internal, "claim zone %s: %v", req.ZoneId, err)
 	}
 	return &spatialserverv1.LookupZoneResponse{
-		Server: &spatialserverv1.ServerID{Id: string(server.ID)},
-		Host:   server.Host,
-		Port:   int32(server.Port),
+		Server:        &spatialserverv1.ServerID{Id: string(server.NodeID)},
+		AdvertiseAddr: server.Address(),
 	}, nil
 }
 
@@ -159,9 +169,10 @@ func main() {
 	reflection.Register(srv)
 
 	service := &roomServiceServer{
-		servers: storageroom.NewServerRepository(pgPool),
-		zones:   storageroom.NewZoneRepository(pgPool),
-		fanout:  room.NewWatcherFanout(),
+		servers:   storageroom.NewServerRepository(pgPool),
+		zones:     storageroom.NewZoneRepository(pgPool),
+		fanout:    room.NewWatcherFanout(),
+		allocator: room.LeastLoadedAllocator{},
 	}
 	spatialserverv1.RegisterRoomServiceServer(srv, service)
 

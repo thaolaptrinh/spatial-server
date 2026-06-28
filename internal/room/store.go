@@ -7,10 +7,10 @@ import (
 )
 
 type ServerStore interface {
-	Register(ctx context.Context, info *ServerInfo) error
-	Heartbeat(ctx context.Context, id types.ServerID) error
-	Get(ctx context.Context, id types.ServerID) (*ServerInfo, error)
-	LeastLoaded(ctx context.Context) (*ServerInfo, error)
+	Register(ctx context.Context, info *NodeDescriptor) error
+	Heartbeat(ctx context.Context, id types.ServerID, load NodeLoad) error
+	Get(ctx context.Context, id types.ServerID) (*NodeDescriptor, error)
+	List(ctx context.Context) ([]*NodeDescriptor, error)
 	Remove(ctx context.Context, id types.ServerID) error
 }
 

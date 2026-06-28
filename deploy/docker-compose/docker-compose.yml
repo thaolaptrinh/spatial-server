@@ -47,10 +47,15 @@ services:
       context: ../..
       dockerfile: build/docker/game-server.Dockerfile
     depends_on:
-      - room-service
+      postgres:
+        condition: service_healthy
+      room-service:
+        condition: service_started
     environment:
       SPATIAL_GRPC__HOST: "game-server"
       SPATIAL_GRPC__PORT: "9000"
+      SPATIAL_POSTGRES__DSN: "postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable"
+      SPATIAL_REDIS__ADDR: "redis:6379"
 
   gateway:
     build:

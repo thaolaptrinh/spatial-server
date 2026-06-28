@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,14 +20,14 @@ type fakeLookuper struct {
 	err  error
 }
 
-func (f *fakeLookuper) LookupZone(ctx context.Context, zoneID string) (string, int32, error) {
-	return f.host, f.port, f.err
+func (f *fakeLookuper) LookupZone(ctx context.Context, zoneID string) (string, error) {
+	return fmt.Sprintf("%s:%d", f.host, f.port), f.err
 }
 
 type stubLookuper struct{}
 
-func (s *stubLookuper) LookupZone(_ context.Context, _ string) (string, int32, error) {
-	return "127.0.0.1", 9000, nil
+func (s *stubLookuper) LookupZone(ctx context.Context, zoneID string) (string, error) {
+	return "127.0.0.1:9000", nil
 }
 
 func TestHandler_LiveEndpoint(t *testing.T) {
@@ -41,6 +42,17 @@ func TestHandler_Ready_503WhenDraining(t *testing.T) {
 	h.SetDraining(true)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+// TestHandleWS_503WhenDraining verifies new WebSocket connections are rejected
+// while the gateway is draining (graceful shutdown), so no new sessions are
+// accepted during drain.
+func TestHandleWS_503WhenDraining(t *testing.T) {
+	h := NewHandler(NewRouterCache(time.Second), &stubLookuper{}, []byte("k"), nil)
+	h.SetDraining(true)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ws?token=x", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 

@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  game-server-1:
+    extends:
+      file: docker-compose.yml
+      service: game-server
+    hostname: game-server-1
+    environment:
+      SPATIAL_GRPC__HOST: "game-server-1"
+      SPATIAL_POSTGRES__DSN: "postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      room-service:
+        condition: service_started
+
+  game-server-2:
+    extends:
+      file: docker-compose.yml
+      service: game-server
+    hostname: game-server-2
+    environment:
+      SPATIAL_GRPC__HOST: "game-server-2"
+      SPATIAL_POSTGRES__DSN: "postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      room-service:
+        condition: service_started

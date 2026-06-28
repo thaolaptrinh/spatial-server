@@ -41,3 +41,52 @@ func (h *Histogram) Count() int {
 	defer h.mu.Unlock()
 	return len(h.data)
 }
+
+func (h *Histogram) Mean() float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.data) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, v := range h.data {
+		sum += v
+	}
+	return sum / float64(len(h.data))
+}
+
+func (h *Histogram) Max() float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.data) == 0 {
+		return 0
+	}
+	m := h.data[0]
+	for _, v := range h.data {
+		if v > m {
+			m = v
+		}
+	}
+	return m
+}
+
+// Stdev returns the population standard deviation of the observed samples.
+func (h *Histogram) Stdev() float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := len(h.data)
+	if n == 0 {
+		return 0
+	}
+	var sum, mean float64
+	for _, v := range h.data {
+		sum += v
+	}
+	mean = sum / float64(n)
+	var sq float64
+	for _, v := range h.data {
+		d := v - mean
+		sq += d * d
+	}
+	return math.Sqrt(sq / float64(n))
+}

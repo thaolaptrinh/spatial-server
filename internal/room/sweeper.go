@@ -52,7 +52,7 @@ func (s *Sweeper) sweep(now time.Time) {
 		if info.Status == types.ServerStatusShutdown {
 			continue
 		}
-		if now.Sub(info.LastBeat) > s.cfg.MissThreshold {
+		if now.Sub(info.LastHeartbeat) > s.cfg.MissThreshold {
 			dead = append(dead, id)
 		}
 	}
@@ -87,7 +87,7 @@ func (s *Sweeper) reassignZonesOf(dead types.ServerID) {
 			continue
 		}
 		if s.reassign != nil {
-			s.reassign(zoneID, target.ID)
+			s.reassign(zoneID, target.NodeID)
 		}
 	}
 }

@@ -36,7 +36,7 @@ Reusable distributed realtime spatial server platform for 3D Showroom, Virtual O
 | Layer | Technology |
 |---|---|
 | Language | Go |
-| Client Protocol | WebSocket (nhooyr.io) |
+| Client Protocol | WebSocket (coder/websocket) |
 | Internal RPC | gRPC / Protobuf |
 | Database | PostgreSQL (pgx) |
 | Cache | Redis (go-redis) |
@@ -58,55 +58,68 @@ Reusable distributed realtime spatial server platform for 3D Showroom, Virtual O
 ## Project Structure
 
 ```
-├── apps/               # Service binaries
-│   ├── gateway/        # WebSocket + auth + rate limiting
-│   ├── room-service/   # Zone ownership + runtime lifecycle
-│   └── game-server/    # Simulation loop + entity management
-├── pkg/                # Shared libraries
-│   ├── auth/           # JWT generation/validation
-│   ├── config/         # YAML + env configuration
-│   ├── entity/         # Entity model
-│   ├── game/           # Game loop
-│   ├── gateway/        # Gateway server + handler
-│   ├── idgen/          # UUIDv7 generation
+├── apps/               # Service binaries (thin mains)
+│   ├── gateway/        # WebSocket termination + auth orchestration + routing
+│   ├── room-service/   # Zone ownership registry + runtime lifecycle + coordination
+│   └── game-server/    # Spatial simulation + entity lifecycle + AOI
+├── internal/           # Service implementations + shared infrastructure (not importable outside module)
+│   ├── gateway/        # WebSocket handler, relay, router cache
+│   ├── room/           # Registry, ownership, SpatialServerAPI
+│   ├── game/           # Simulation, NPC, entity, AOI, zone
+│   ├── auth/           # JWT validation (cross-cutting)
+│   ├── session/        # Session pool (cross-cutting)
+│   ├── transport/      # WebSocket abstraction (Connection interface)
+│   ├── storage/        # PG/Redis pools, migrations, domain repos
+│   ├── grpc/           # gRPC interceptors (recovery, logging, metrics)
+│   ├── mtls/           # Mutual TLS helpers
+│   ├── observability/  # Tracing setup
+│   ├── config/         # Configuration loading (koanf)
 │   ├── logging/        # Structured logging (slog)
-│   ├── protocol/       # Binary packet protocol
-│   ├── room/           # Room service core
-│   └── storage/        # PostgreSQL + Redis connections
-├── proto/              # gRPC protobuf definitions
-├── configs/            # YAML config files
-├── deploy/             # Docker Compose + Dockerfiles
+│   ├── metrics/        # Prometheus metrics
+│   ├── migration/      # Migration runner
+│   └── types/          # Shared types (IDs, Vector3, statuses, errors)
+├── pkg/                # Exportable libraries (external reuse)
+│   └── protocol/       # Binary packet protocol
+├── proto/              # gRPC protobuf definitions + generated code
+│   ├── spatialserver/  # .proto sources
+│   └── gen/            # generated Go code
+├── configs/            # YAML config files per service
+├── deploy/             # Docker Compose (dev)
 ├── infra/              # Helm charts + Terraform
-├── scripts/            # Dev scripts
-└── docs/               # ADRs + specs
+├── scripts/            # dev-up.sh, dev-down.sh
+├── tests/              # Integration tests (Testcontainers)
+├── benchmarks/         # Load / simulation framework
+├── tools/              # CLI tools (client)
+└── docs/               # Architecture, ADRs, standards, ops, testing
 ```
+
+> Service implementations live under `internal/` (not importable outside the module). Only `pkg/protocol/` is intended for external reuse. See [docs/architecture/repository-structure.md](docs/architecture/repository-structure.md) and [AGENTS.md](AGENTS.md) for the dependency rules.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - Docker + Docker Compose
 
 ### Local Development
 
 ```bash
 # Start infrastructure (PostgreSQL, Redis)
-docker compose -f deploy/docker-compose/docker-compose.yml up -d
+make dev-up
+# (equivalently: docker compose -f deploy/docker-compose/docker-compose.yml up -d)
 
-# Run migrations
-SPATIAL_POSTGRES_DSN="postgres://spatial:spatial@localhost:5432/spatial?sslmode=disable" \
-  go run ./pkg/storage/migrations/migrate.go -dsn "$SPATIAL_POSTGRES_DSN" -direction up
+# Run unit tests (most packages need no DB)
+go test ./internal/... ./pkg/... -v -race -cover
 
-# Run tests
-go test ./pkg/... -v -race -cover
+# Integration tests spin up their own Postgres/Redis via Testcontainers
+go test -tags=integration -count=1 -timeout=120s ./tests/integration/...
 ```
 
-Or use the dev script:
-
-```bash
-./scripts/dev-up.sh
-```
+Migrations live in `internal/storage/migrations/` and are applied automatically by the
+Room Service and Game Server binaries on startup (via `internal/migration`). There is no
+standalone migrate CLI; to apply migrations manually, run a service binary or use the
+`golang-migrate` CLI directly against that directory.
 
 ### Build
 

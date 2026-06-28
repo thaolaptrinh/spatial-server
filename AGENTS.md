@@ -134,7 +134,7 @@ All docs live in `docs/`. Every doc must have:
 - Cross-references use relative paths: `[ADR-009](../adr/009-rpc-contract.md)`
 
 ### ADRs
-- 23 numbered ADRs in `docs/adr/` — never create a new one without incrementing
+- 26 numbered ADRs in `docs/adr/` — never create a new one without incrementing
 - Format: Context → Problem → Decision → Alternatives → Tradeoffs → Consequences → Future Considerations
 
 ### Diagrams

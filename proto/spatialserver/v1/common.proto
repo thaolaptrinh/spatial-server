@@ -93,8 +93,12 @@ message EntityAction {
 
 message EntityState {
   string entity_id = 1;
-  string animation = 2;
-  int32 health = 3;
+  // Fields 2 and 3 previously held business-specific state (animation, health).
+  // The runtime must not interpret business attributes; state is carried
+  // opaquely via the attributes map below. Numbers/names are reserved so
+  // they are never accidentally reused.
+  reserved 2, 3;
+  reserved "animation", "health";
   map<string, bytes> attributes = 4;
   int64 timestamp = 5;
 }

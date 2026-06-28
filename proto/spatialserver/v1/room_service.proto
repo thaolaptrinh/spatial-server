@@ -24,6 +24,11 @@ message RegisterRequest {
   int32 port = 3;
   int32 max_zones = 4;
   map<string, string> metadata = 5;
+  // Node descriptor fields (adr-025).
+  string advertise_addr = 6;
+  string version = 7;
+  string build = 8;
+  map<string, string> labels = 9;
 }
 
 message RegisterResponse {
@@ -31,7 +36,13 @@ message RegisterResponse {
 }
 
 message HeartbeatRequest {
-  string server_id = 1;
+  string node_id = 1;
+  // Scheduling-relevant load (not a general metrics dump).
+  int32 active_entities = 2;
+  int32 active_spaces = 3;
+  int32 connected_users = 4;
+  int32 queue_depth = 5;
+  double tick_duration_ms = 6;
 }
 
 message HeartbeatResponse {
@@ -48,8 +59,10 @@ message LookupZoneRequest {
 
 message LookupZoneResponse {
   spatialserver.v1.ServerID server = 1;
-  string host = 2;
-  int32 port = 3;
+  string advertise_addr = 2;
+  // Deprecated — use advertise_addr.
+  string host = 3 [deprecated = true];
+  int32 port = 4 [deprecated = true];
 }
 
 message LookupServerRequest {

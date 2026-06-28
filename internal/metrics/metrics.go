@@ -13,6 +13,11 @@ type Registry struct {
 	EntityCount         *prometheus.GaugeVec
 	TickDurationSeconds prometheus.Histogram
 	GRPCRequestDuration *prometheus.HistogramVec
+	QueueDepth          *prometheus.GaugeVec
+	DroppedTotal        *prometheus.CounterVec
+	TickOverruns        prometheus.Counter
+	ActiveSpaces        prometheus.Gauge
+	RuntimeEvents       *prometheus.CounterVec
 	reg                 *prometheus.Registry
 }
 
@@ -42,6 +47,26 @@ func NewRegistry() *Registry {
 			Name:      "grpc_request_duration_seconds",
 			Buckets:   []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.5},
 		}, []string{"service", "method"}),
+		QueueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: "spatial",
+			Name:      "queue_depth",
+		}, []string{"queue"}),
+		DroppedTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "spatial",
+			Name:      "dropped_total",
+		}, []string{"queue"}),
+		TickOverruns: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "spatial",
+			Name:      "tick_overruns_total",
+		}),
+		ActiveSpaces: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "spatial",
+			Name:      "active_spaces",
+		}),
+		RuntimeEvents: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "spatial",
+			Name:      "runtime_events_total",
+		}, []string{"kind"}),
 	}
 	r.MustRegister(
 		m.ActiveConnections,
@@ -49,6 +74,11 @@ func NewRegistry() *Registry {
 		m.EntityCount,
 		m.TickDurationSeconds,
 		m.GRPCRequestDuration,
+		m.QueueDepth,
+		m.DroppedTotal,
+		m.TickOverruns,
+		m.ActiveSpaces,
+		m.RuntimeEvents,
 	)
 	return m
 }

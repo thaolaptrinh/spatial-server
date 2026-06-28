@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/thaolaptrinh/spatial-server/internal/auth"
+	"github.com/thaolaptrinh/spatial-server/internal/metrics"
 	"github.com/thaolaptrinh/spatial-server/internal/session"
 	transportws "github.com/thaolaptrinh/spatial-server/internal/transport/websocket"
 	"github.com/thaolaptrinh/spatial-server/internal/types"
@@ -18,7 +19,7 @@ import (
 )
 
 type ZoneLookuper interface {
-	LookupZone(ctx context.Context, zoneID string) (host string, port int32, err error)
+	LookupZone(ctx context.Context, zoneID string) (addr string, err error)
 }
 
 type Handler struct {
@@ -34,6 +35,8 @@ type Handler struct {
 	readyFn       func() bool
 	connLimitRate float64
 	ipLimiter     *ipLimiter
+	reg           *metrics.Registry
+	baseCtx       context.Context
 }
 
 func NewHandler(cache *RouterCache, lookuper ZoneLookuper, jwtSecret []byte, wsAccepter transportws.Accepter) *Handler {
@@ -78,6 +81,18 @@ func (h *Handler) SetReadyFn(fn func() bool) {
 	h.readyFn = fn
 }
 
+// SetMetrics wires the Prometheus registry so the gateway can report active
+// connections and dropped packets.
+func (h *Handler) SetMetrics(reg *metrics.Registry) {
+	h.reg = reg
+}
+
+// SetBaseContext sets the base context used as the parent for relay goroutines
+// so they are cancelled on shutdown instead of leaking.
+func (h *Handler) SetBaseContext(ctx context.Context) {
+	h.baseCtx = ctx
+}
+
 func (h *Handler) ConnCount() int64 {
 	return h.conns.Load()
 }
@@ -112,7 +127,12 @@ func (h *Handler) handleReady(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// Sets a marker, fixing handler below
 func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
+	if h.draining.Load() {
+		http.Error(w, "draining", http.StatusServiceUnavailable)
+		return
+	}
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		http.Error(w, "missing token", http.StatusBadRequest)
@@ -127,16 +147,18 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	h.conns.Add(1)
 	defer h.conns.Add(-1)
+	if h.reg != nil {
+		h.reg.ActiveConnections.Inc()
+		defer h.reg.ActiveConnections.Dec()
+	}
 
-	host, port, err := h.lookuper.LookupZone(r.Context(), claims.ZoneID)
+	addr, err := h.lookuper.LookupZone(r.Context(), claims.ZoneID)
 	if err != nil {
 		http.Error(w, "zone not available", http.StatusServiceUnavailable)
 		return
 	}
 
 	clientID := claims.PlayerID
-	serverID := types.ServerID("")
-	_ = serverID
 
 	c, err := h.wsAccepter.Accept(w, r)
 	if err != nil {
@@ -145,10 +167,10 @@ func (h *Handler) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	c.SetReadLimit(64 * 1024)
 
-	sess := session.NewSession(clientID, claims.PlayerID, types.ZoneID(claims.ZoneID), serverID)
+	sess := session.NewSession(clientID, claims.PlayerID, types.ZoneID(claims.ZoneID), types.ServerID(""))
 	h.pool.Add(sess)
 
-	go h.relayWS(c, clientID, host, int(port), claims)
+	go h.relayWS(c, clientID, addr, claims)
 }
 
 type ZoneWatcher interface {

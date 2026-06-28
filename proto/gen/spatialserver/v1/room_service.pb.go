@@ -22,12 +22,17 @@ const (
 )
 
 type RegisterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
-	MaxZones      int32                  `protobuf:"varint,4,opt,name=max_zones,json=maxZones,proto3" json:"max_zones,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ServerId string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Host     string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Port     int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	MaxZones int32                  `protobuf:"varint,4,opt,name=max_zones,json=maxZones,proto3" json:"max_zones,omitempty"`
+	Metadata map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Node descriptor fields (adr-025).
+	AdvertiseAddr string            `protobuf:"bytes,6,opt,name=advertise_addr,json=advertiseAddr,proto3" json:"advertise_addr,omitempty"`
+	Version       string            `protobuf:"bytes,7,opt,name=version,proto3" json:"version,omitempty"`
+	Build         string            `protobuf:"bytes,8,opt,name=build,proto3" json:"build,omitempty"`
+	Labels        map[string]string `protobuf:"bytes,9,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -97,6 +102,34 @@ func (x *RegisterRequest) GetMetadata() map[string]string {
 	return nil
 }
 
+func (x *RegisterRequest) GetAdvertiseAddr() string {
+	if x != nil {
+		return x.AdvertiseAddr
+	}
+	return ""
+}
+
+func (x *RegisterRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *RegisterRequest) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *RegisterRequest) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
 type RegisterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -142,10 +175,16 @@ func (x *RegisterResponse) GetSuccess() bool {
 }
 
 type HeartbeatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServerId      string                 `protobuf:"bytes,1,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NodeId string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// Scheduling-relevant load (not a general metrics dump).
+	ActiveEntities int32   `protobuf:"varint,2,opt,name=active_entities,json=activeEntities,proto3" json:"active_entities,omitempty"`
+	ActiveSpaces   int32   `protobuf:"varint,3,opt,name=active_spaces,json=activeSpaces,proto3" json:"active_spaces,omitempty"`
+	ConnectedUsers int32   `protobuf:"varint,4,opt,name=connected_users,json=connectedUsers,proto3" json:"connected_users,omitempty"`
+	QueueDepth     int32   `protobuf:"varint,5,opt,name=queue_depth,json=queueDepth,proto3" json:"queue_depth,omitempty"`
+	TickDurationMs float64 `protobuf:"fixed64,6,opt,name=tick_duration_ms,json=tickDurationMs,proto3" json:"tick_duration_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *HeartbeatRequest) Reset() {
@@ -178,11 +217,46 @@ func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
 	return file_spatialserver_v1_room_service_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *HeartbeatRequest) GetServerId() string {
+func (x *HeartbeatRequest) GetNodeId() string {
 	if x != nil {
-		return x.ServerId
+		return x.NodeId
 	}
 	return ""
+}
+
+func (x *HeartbeatRequest) GetActiveEntities() int32 {
+	if x != nil {
+		return x.ActiveEntities
+	}
+	return 0
+}
+
+func (x *HeartbeatRequest) GetActiveSpaces() int32 {
+	if x != nil {
+		return x.ActiveSpaces
+	}
+	return 0
+}
+
+func (x *HeartbeatRequest) GetConnectedUsers() int32 {
+	if x != nil {
+		return x.ConnectedUsers
+	}
+	return 0
+}
+
+func (x *HeartbeatRequest) GetQueueDepth() int32 {
+	if x != nil {
+		return x.QueueDepth
+	}
+	return 0
+}
+
+func (x *HeartbeatRequest) GetTickDurationMs() float64 {
+	if x != nil {
+		return x.TickDurationMs
+	}
+	return 0
 }
 
 type HeartbeatResponse struct {
@@ -320,8 +394,13 @@ func (x *LookupZoneRequest) GetZoneId() string {
 type LookupZoneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Server        *ServerID              `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
-	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	Port          int32                  `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	AdvertiseAddr string                 `protobuf:"bytes,2,opt,name=advertise_addr,json=advertiseAddr,proto3" json:"advertise_addr,omitempty"`
+	// Deprecated — use advertise_addr.
+	//
+	// Deprecated: Marked as deprecated in spatialserver/v1/room_service.proto.
+	Host string `protobuf:"bytes,3,opt,name=host,proto3" json:"host,omitempty"`
+	// Deprecated: Marked as deprecated in spatialserver/v1/room_service.proto.
+	Port          int32 `protobuf:"varint,4,opt,name=port,proto3" json:"port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -363,6 +442,14 @@ func (x *LookupZoneResponse) GetServer() *ServerID {
 	return nil
 }
 
+func (x *LookupZoneResponse) GetAdvertiseAddr() string {
+	if x != nil {
+		return x.AdvertiseAddr
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in spatialserver/v1/room_service.proto.
 func (x *LookupZoneResponse) GetHost() string {
 	if x != nil {
 		return x.Host
@@ -370,6 +457,7 @@ func (x *LookupZoneResponse) GetHost() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in spatialserver/v1/room_service.proto.
 func (x *LookupZoneResponse) GetPort() int32 {
 	if x != nil {
 		return x.Port
@@ -841,30 +929,44 @@ var File_spatialserver_v1_room_service_proto protoreflect.FileDescriptor
 
 const file_spatialserver_v1_room_service_proto_rawDesc = "" +
 	"\n" +
-	"#spatialserver/v1/room_service.proto\x12\x10spatialserver.v1\x1a\x1dspatialserver/v1/common.proto\"\xfd\x01\n" +
+	"#spatialserver/v1/room_service.proto\x12\x10spatialserver.v1\x1a\x1dspatialserver/v1/common.proto\"\xd6\x03\n" +
 	"\x0fRegisterRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x03 \x01(\x05R\x04port\x12\x1b\n" +
 	"\tmax_zones\x18\x04 \x01(\x05R\bmaxZones\x12K\n" +
-	"\bmetadata\x18\x05 \x03(\v2/.spatialserver.v1.RegisterRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x05 \x03(\v2/.spatialserver.v1.RegisterRequest.MetadataEntryR\bmetadata\x12%\n" +
+	"\x0eadvertise_addr\x18\x06 \x01(\tR\radvertiseAddr\x12\x18\n" +
+	"\aversion\x18\a \x01(\tR\aversion\x12\x14\n" +
+	"\x05build\x18\b \x01(\tR\x05build\x12E\n" +
+	"\x06labels\x18\t \x03(\v2-.spatialserver.v1.RegisterRequest.LabelsEntryR\x06labels\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\",\n" +
 	"\x10RegisterResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"/\n" +
-	"\x10HeartbeatRequest\x12\x1b\n" +
-	"\tserver_id\x18\x01 \x01(\tR\bserverId\"7\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xed\x01\n" +
+	"\x10HeartbeatRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12'\n" +
+	"\x0factive_entities\x18\x02 \x01(\x05R\x0eactiveEntities\x12#\n" +
+	"\ractive_spaces\x18\x03 \x01(\x05R\factiveSpaces\x12'\n" +
+	"\x0fconnected_users\x18\x04 \x01(\x05R\x0econnectedUsers\x12\x1f\n" +
+	"\vqueue_depth\x18\x05 \x01(\x05R\n" +
+	"queueDepth\x12(\n" +
+	"\x10tick_duration_ms\x18\x06 \x01(\x01R\x0etickDurationMs\"7\n" +
 	"\x11HeartbeatResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\"=\n" +
 	"\x17PrepareShutdownResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\",\n" +
 	"\x11LookupZoneRequest\x12\x17\n" +
-	"\azone_id\x18\x01 \x01(\tR\x06zoneId\"p\n" +
+	"\azone_id\x18\x01 \x01(\tR\x06zoneId\"\x9f\x01\n" +
 	"\x12LookupZoneResponse\x122\n" +
-	"\x06server\x18\x01 \x01(\v2\x1a.spatialserver.v1.ServerIDR\x06server\x12\x12\n" +
-	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x03 \x01(\x05R\x04port\"2\n" +
+	"\x06server\x18\x01 \x01(\v2\x1a.spatialserver.v1.ServerIDR\x06server\x12%\n" +
+	"\x0eadvertise_addr\x18\x02 \x01(\tR\radvertiseAddr\x12\x16\n" +
+	"\x04host\x18\x03 \x01(\tB\x02\x18\x01R\x04host\x12\x16\n" +
+	"\x04port\x18\x04 \x01(\x05B\x02\x18\x01R\x04port\"2\n" +
 	"\x13LookupServerRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"v\n" +
 	"\x14LookupServerResponse\x12\x12\n" +
@@ -915,7 +1017,7 @@ func file_spatialserver_v1_room_service_proto_rawDescGZIP() []byte {
 	return file_spatialserver_v1_room_service_proto_rawDescData
 }
 
-var file_spatialserver_v1_room_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_spatialserver_v1_room_service_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_spatialserver_v1_room_service_proto_goTypes = []any{
 	(*RegisterRequest)(nil),         // 0: spatialserver.v1.RegisterRequest
 	(*RegisterResponse)(nil),        // 1: spatialserver.v1.RegisterResponse
@@ -934,37 +1036,39 @@ var file_spatialserver_v1_room_service_proto_goTypes = []any{
 	(*WatchRequest)(nil),            // 14: spatialserver.v1.WatchRequest
 	(*OwnershipChange)(nil),         // 15: spatialserver.v1.OwnershipChange
 	nil,                             // 16: spatialserver.v1.RegisterRequest.MetadataEntry
-	(*ServerID)(nil),                // 17: spatialserver.v1.ServerID
-	(ServerStatus)(0),               // 18: spatialserver.v1.ServerStatus
-	(*ZoneSnapshot)(nil),            // 19: spatialserver.v1.ZoneSnapshot
+	nil,                             // 17: spatialserver.v1.RegisterRequest.LabelsEntry
+	(*ServerID)(nil),                // 18: spatialserver.v1.ServerID
+	(ServerStatus)(0),               // 19: spatialserver.v1.ServerStatus
+	(*ZoneSnapshot)(nil),            // 20: spatialserver.v1.ZoneSnapshot
 }
 var file_spatialserver_v1_room_service_proto_depIdxs = []int32{
 	16, // 0: spatialserver.v1.RegisterRequest.metadata:type_name -> spatialserver.v1.RegisterRequest.MetadataEntry
-	17, // 1: spatialserver.v1.LookupZoneResponse.server:type_name -> spatialserver.v1.ServerID
-	18, // 2: spatialserver.v1.LookupServerResponse.status:type_name -> spatialserver.v1.ServerStatus
-	0,  // 3: spatialserver.v1.RoomService.Register:input_type -> spatialserver.v1.RegisterRequest
-	2,  // 4: spatialserver.v1.RoomService.Heartbeat:input_type -> spatialserver.v1.HeartbeatRequest
-	17, // 5: spatialserver.v1.RoomService.PrepareShutdown:input_type -> spatialserver.v1.ServerID
-	5,  // 6: spatialserver.v1.RoomService.LookupZone:input_type -> spatialserver.v1.LookupZoneRequest
-	7,  // 7: spatialserver.v1.RoomService.LookupServer:input_type -> spatialserver.v1.LookupServerRequest
-	9,  // 8: spatialserver.v1.RoomService.ReportMetrics:input_type -> spatialserver.v1.ReportMetricsRequest
-	19, // 9: spatialserver.v1.RoomService.TransferZone:input_type -> spatialserver.v1.ZoneSnapshot
-	12, // 10: spatialserver.v1.RoomService.PrepareTransfer:input_type -> spatialserver.v1.PrepareTransferRequest
-	14, // 11: spatialserver.v1.RoomService.WatchOwnership:input_type -> spatialserver.v1.WatchRequest
-	1,  // 12: spatialserver.v1.RoomService.Register:output_type -> spatialserver.v1.RegisterResponse
-	3,  // 13: spatialserver.v1.RoomService.Heartbeat:output_type -> spatialserver.v1.HeartbeatResponse
-	4,  // 14: spatialserver.v1.RoomService.PrepareShutdown:output_type -> spatialserver.v1.PrepareShutdownResponse
-	6,  // 15: spatialserver.v1.RoomService.LookupZone:output_type -> spatialserver.v1.LookupZoneResponse
-	8,  // 16: spatialserver.v1.RoomService.LookupServer:output_type -> spatialserver.v1.LookupServerResponse
-	10, // 17: spatialserver.v1.RoomService.ReportMetrics:output_type -> spatialserver.v1.ReportMetricsResponse
-	11, // 18: spatialserver.v1.RoomService.TransferZone:output_type -> spatialserver.v1.TransferZoneResponse
-	13, // 19: spatialserver.v1.RoomService.PrepareTransfer:output_type -> spatialserver.v1.PrepareTransferResponse
-	15, // 20: spatialserver.v1.RoomService.WatchOwnership:output_type -> spatialserver.v1.OwnershipChange
-	12, // [12:21] is the sub-list for method output_type
-	3,  // [3:12] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	17, // 1: spatialserver.v1.RegisterRequest.labels:type_name -> spatialserver.v1.RegisterRequest.LabelsEntry
+	18, // 2: spatialserver.v1.LookupZoneResponse.server:type_name -> spatialserver.v1.ServerID
+	19, // 3: spatialserver.v1.LookupServerResponse.status:type_name -> spatialserver.v1.ServerStatus
+	0,  // 4: spatialserver.v1.RoomService.Register:input_type -> spatialserver.v1.RegisterRequest
+	2,  // 5: spatialserver.v1.RoomService.Heartbeat:input_type -> spatialserver.v1.HeartbeatRequest
+	18, // 6: spatialserver.v1.RoomService.PrepareShutdown:input_type -> spatialserver.v1.ServerID
+	5,  // 7: spatialserver.v1.RoomService.LookupZone:input_type -> spatialserver.v1.LookupZoneRequest
+	7,  // 8: spatialserver.v1.RoomService.LookupServer:input_type -> spatialserver.v1.LookupServerRequest
+	9,  // 9: spatialserver.v1.RoomService.ReportMetrics:input_type -> spatialserver.v1.ReportMetricsRequest
+	20, // 10: spatialserver.v1.RoomService.TransferZone:input_type -> spatialserver.v1.ZoneSnapshot
+	12, // 11: spatialserver.v1.RoomService.PrepareTransfer:input_type -> spatialserver.v1.PrepareTransferRequest
+	14, // 12: spatialserver.v1.RoomService.WatchOwnership:input_type -> spatialserver.v1.WatchRequest
+	1,  // 13: spatialserver.v1.RoomService.Register:output_type -> spatialserver.v1.RegisterResponse
+	3,  // 14: spatialserver.v1.RoomService.Heartbeat:output_type -> spatialserver.v1.HeartbeatResponse
+	4,  // 15: spatialserver.v1.RoomService.PrepareShutdown:output_type -> spatialserver.v1.PrepareShutdownResponse
+	6,  // 16: spatialserver.v1.RoomService.LookupZone:output_type -> spatialserver.v1.LookupZoneResponse
+	8,  // 17: spatialserver.v1.RoomService.LookupServer:output_type -> spatialserver.v1.LookupServerResponse
+	10, // 18: spatialserver.v1.RoomService.ReportMetrics:output_type -> spatialserver.v1.ReportMetricsResponse
+	11, // 19: spatialserver.v1.RoomService.TransferZone:output_type -> spatialserver.v1.TransferZoneResponse
+	13, // 20: spatialserver.v1.RoomService.PrepareTransfer:output_type -> spatialserver.v1.PrepareTransferResponse
+	15, // 21: spatialserver.v1.RoomService.WatchOwnership:output_type -> spatialserver.v1.OwnershipChange
+	13, // [13:22] is the sub-list for method output_type
+	4,  // [4:13] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_spatialserver_v1_room_service_proto_init() }
@@ -979,7 +1083,7 @@ func file_spatialserver_v1_room_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spatialserver_v1_room_service_proto_rawDesc), len(file_spatialserver_v1_room_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

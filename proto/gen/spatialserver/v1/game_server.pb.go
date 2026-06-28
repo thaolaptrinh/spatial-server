@@ -24,11 +24,11 @@ const (
 type Kind int32
 
 const (
-	Kind_KIND_UNSPECIFIED      Kind = 0
-	Kind_KIND_DATA             Kind = 1
-	Kind_KIND_CONNECT          Kind = 2
-	Kind_KIND_DISCONNECT       Kind = 3
-	Kind_KIND_RECONNECT        Kind = 4
+	Kind_KIND_UNSPECIFIED       Kind = 0
+	Kind_KIND_DATA              Kind = 1
+	Kind_KIND_CONNECT           Kind = 2
+	Kind_KIND_DISCONNECT        Kind = 3
+	Kind_KIND_RECONNECT         Kind = 4
 	Kind_KIND_PEER_DISCONNECTED Kind = 5
 )
 
@@ -43,11 +43,11 @@ var (
 		5: "KIND_PEER_DISCONNECTED",
 	}
 	Kind_value = map[string]int32{
-		"KIND_UNSPECIFIED":      0,
-		"KIND_DATA":             1,
-		"KIND_CONNECT":          2,
-		"KIND_DISCONNECT":       3,
-		"KIND_RECONNECT":        4,
+		"KIND_UNSPECIFIED":       0,
+		"KIND_DATA":              1,
+		"KIND_CONNECT":           2,
+		"KIND_DISCONNECT":        3,
+		"KIND_RECONNECT":         4,
 		"KIND_PEER_DISCONNECTED": 5,
 	}
 )
@@ -765,12 +765,14 @@ const file_spatialserver_v1_game_server_proto_rawDesc = "" +
 	"\vtype_filter\x18\x04 \x03(\tR\n" +
 	"typeFilter\"U\n" +
 	"\x15QueryEntitiesResponse\x12<\n" +
-	"\bentities\x18\x01 \x03(\v2 .spatialserver.v1.EntitySnapshotR\bentities*R\n" +
+	"\bentities\x18\x01 \x03(\v2 .spatialserver.v1.EntitySnapshotR\bentities*\x82\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tKIND_DATA\x10\x01\x12\x10\n" +
 	"\fKIND_CONNECT\x10\x02\x12\x13\n" +
-	"\x0fKIND_DISCONNECT\x10\x032\xad\x06\n" +
+	"\x0fKIND_DISCONNECT\x10\x03\x12\x12\n" +
+	"\x0eKIND_RECONNECT\x10\x04\x12\x1a\n" +
+	"\x16KIND_PEER_DISCONNECTED\x10\x052\xad\x06\n" +
 	"\n" +
 	"GameServer\x12W\n" +
 	"\n" +

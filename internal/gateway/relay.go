@@ -15,21 +15,30 @@ import (
 	transportws "github.com/thaolaptrinh/spatial-server/internal/transport/websocket"
 )
 
-func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, port int, claims *auth.Claims) {
+func (h *Handler) relayWS(conn transportws.Connection, clientID, addr string, claims *auth.Claims) {
 	defer func() {
 		h.pool.Remove(clientID)
 		conn.CloseNow()
 	}()
 
-	ctx := context.Background()
+	// Use the resolved address directly (advertise_addr from the room-service).
+	// The addr is either host:port, a Kubernetes service, or any routable string.
+	parent := h.baseCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
 
-	target := fmt.Sprintf("%s:%d", host, port)
-	gconn, err := grpc.DialContext(ctx, target,
+	target := fmt.Sprintf("dns:///%s", addr)
+	dialCtx, dialCancel := context.WithTimeout(ctx, 3*time.Second)
+	gconn, err := grpc.DialContext(dialCtx, target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
+	dialCancel()
 	if err != nil {
-		slog.Warn("dial game-server", slog.String("error", err.Error()))
+		slog.Warn("dial game-server", slog.String("error", err.Error()), slog.String("target", target))
 		return
 	}
 	defer gconn.Close()
@@ -67,9 +76,15 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 				return
 			}
 			if !connLimiter.allow() {
+				if h.reg != nil {
+					h.reg.DroppedTotal.WithLabelValues("packets_in_rate").Inc()
+				}
 				continue
 			}
-			if h.ipLimiter != nil && !ipLimiter.allow(ip) {
+			if ipLimiter != nil && !ipLimiter.allow(ip) {
+				if h.reg != nil {
+					h.reg.DroppedTotal.WithLabelValues("packets_in_ip_rate").Inc()
+				}
 				continue
 			}
 			if err := stream.Send(&spatialserverv1.RelayPacket{
@@ -79,6 +94,9 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 			}); err != nil {
 				errCh <- err
 				return
+			}
+			if h.reg != nil {
+				h.reg.PacketsPerSec.WithLabelValues("in", "data").Inc()
 			}
 		}
 	}()
@@ -97,10 +115,15 @@ func (h *Handler) relayWS(conn transportws.Connection, clientID, host string, po
 				errCh <- err
 				return
 			}
+			if h.reg != nil {
+				h.reg.PacketsPerSec.WithLabelValues("out", "data").Inc()
+			}
 		}
 	}()
 
 	<-errCh
+	// ctx cancellation (via defer) unblocks the surviving goroutine so neither
+	// outlives the relay.
 
 	_ = stream.Send(&spatialserverv1.RelayPacket{
 		ClientId: clientID,

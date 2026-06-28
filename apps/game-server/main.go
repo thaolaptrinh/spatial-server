@@ -105,21 +105,17 @@ type gameServerServer struct {
 	spatialserverv1.UnimplementedGameServerServer
 	game    *game.Game
 	clients *clientRegistry
+	reg     *metrics.Registry
 }
 
-func newGameServerServer(g *game.Game) *gameServerServer {
+func newGameServerServer(g *game.Game, reg *metrics.Registry) *gameServerServer {
 	s := &gameServerServer{
 		game:    g,
 		clients: newClientRegistry(),
+		reg:     reg,
 	}
-	go s.drainOutbox()
+	go s.drainEvents()
 	return s
-}
-
-func (s *gameServerServer) drainOutbox() {
-	for pkt := range s.game.Outbox {
-		s.clients.send(pkt.ClientID, pkt.Data)
-	}
 }
 
 func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) error {
@@ -185,6 +181,9 @@ func (s *gameServerServer) Relay(stream spatialserverv1.GameServer_RelayServer) 
 				Data:     pkt.GetPayload(),
 			}:
 			default:
+				if s.reg != nil {
+					s.reg.DroppedTotal.WithLabelValues("inbox").Inc()
+				}
 			}
 
 		case spatialserverv1.Kind_KIND_RECONNECT:
@@ -319,7 +318,7 @@ func main() {
 				return
 			case <-t.C:
 				_, err := rsClient.Heartbeat(context.Background(), &spatialserverv1.HeartbeatRequest{
-					ServerId: string(serverID),
+		NodeId: string(serverID),
 				})
 				if err != nil {
 					logger.Warn("heartbeat failed", slog.String("error", err.Error()))
@@ -368,7 +367,7 @@ func main() {
 	}
 
 	snapRepo := storagegame.NewSnapshotStore(pgPool)
-	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, cfg.Game.SnapshotInterval))
+	g := game.New(serverID, game.WithTickRate(tickRate), game.WithSnapshotter(snapshotAdapter{repo: snapRepo, runtime: string(serverID)}, cfg.Game.SnapshotInterval), game.WithMetrics(gameMetricsAdapter{reg: reg}))
 
 	// Crash recovery: restore from latest snapshot
 	zoneID := types.ZoneID(string(serverID) + "-z1")
@@ -380,13 +379,13 @@ func main() {
 		for _, spec := range cfg.Game.NPCs {
 			npc := entity.New(types.NewEntityID(), spec.Type, types.RuntimeID(""))
 			npc.Position = spec.Position
-			npc.Behavior = spec.Behavior
+			npc.Attrs["behavior"] = []byte(spec.Behavior)
 			npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(spec)}
 			g.AddEntity(npc)
 		}
 	}
 
-	gs := newGameServerServer(g)
+	gs := newGameServerServer(g, reg)
 	spatialserverv1.RegisterGameServerServer(srv, gs)
 
 	go func() {
@@ -442,7 +441,7 @@ func hydrateFromSnapshot(g *game.Game, data []byte) {
 	for _, r := range rows {
 		npc := entity.New(types.EntityID(r.ID), r.Type, types.RuntimeID(""))
 		npc.Position = types.Vector3{X: r.X, Y: r.Y, Z: r.Z}
-		npc.Behavior = r.Behavior
+		npc.Attrs["behavior"] = []byte(r.Behavior)
 		npc.Lifecycle = &game.NPCLifecycle{Behavior: newBehaviorFor(config.NPCSpec{Behavior: r.Behavior, Position: npc.Position})}
 		g.AddEntity(npc)
 	}
