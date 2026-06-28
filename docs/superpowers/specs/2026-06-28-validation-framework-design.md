@@ -17,10 +17,9 @@ The framework validates operational correctness under failure — it does not in
 ```
 internal/validation/               ← framework core (imports runtime, not reverse)
   runner.go                        ← ScenarioRunner — single execution engine
-  scenario.go                      ← ScenarioDefinition + 4 interfaces
-  registry.go                      ← Scenario registry (Register/All)
+  scenario.go                      ← ScenarioDefinition + all interfaces
   measure.go                       ← shared Stats + RecoveryStats model
-  report.go                        ← ValidationReport (JSON/Markdown output)
+  report.go                        ← ValidationReport + SummaryReport (JSON/Markdown)
 
 internal/validation/harness/
   harness.go                       ← //go:build validation, single infrastructure harness
@@ -51,36 +50,36 @@ internal/game/
   probes.go                        ← //go:build validation, Snapshot() for diagnostics
 
 tests/validation/
-  scenarios.go                     ← 15 chaos scenario definitions (pure data, init-registered)
-  chaos_test.go                    ← TestChaos iterates registry, calls Runner
+  scenarios.go                     ← ChaosScenarios() returns 15 definitions
+  chaos_test.go                    ← TestChaos iterates scenarios, calls Runner
 ```
 
 ### Dependency Direction
 
 ```
-tests/validation/*
+tests/validation/                  ← scenario definitions (data, no logic)
     ↓
-internal/validation/*              ← framework library (no build tag)
+internal/validation/*              ← framework interfaces + runner (no build tag)
     ↓
 internal/game/probes.go           ← //go:build validation only
     ↓
 internal/game/*                    ← runtime (never imports validation)
 ```
 
-Runtime never depends on the Validation Framework. The framework depends on the Runtime.
+Runtime never depends on the Validation Framework. The framework may depend on the Runtime.
 Direction is strictly one-way.
 
 ### Build Tags
 
 | Package | Tag | Purpose |
 |---------|-----|---------|
-| `internal/validation/*` | none | Always compiled — pure interfaces + data |
+| `internal/validation/` | none | Interfaces, types, runner — always compiled |
 | `internal/validation/harness/` | `validation` | Testcontainers + Docker SDK |
 | `internal/validation/injectors/` | `validation` | Docker SDK, stress-ng |
 | `internal/validation/observers/` | `validation` | gRPC client, WS client |
 | `internal/validation/recovery/` | `validation` | gRPC client |
 | `internal/game/probes.go` | `validation` | Diagnostic snapshot (zero-cost in production) |
-| `tests/validation/*` | `validation` | Chaos scenario definitions |
+| `tests/validation/` | `validation` | Chaos scenario definitions + test entry point |
 
 Single command: `go test -tags=validation ./tests/validation/...`
 
@@ -93,26 +92,28 @@ Single command: `go test -tags=validation ./tests/validation/...`
 ```go
 type ResourceID string
 
+// Resource types — NOT deployment instances.
+// The harness resolves concrete instances dynamically.
 const (
-    ResourcePostgres     ResourceID = "postgres"
-    ResourceRedis        ResourceID = "redis"
-    ResourceRoomService  ResourceID = "room-service"
-    ResourceGameServer   ResourceID = "game-server"
-    ResourceGameServer1  ResourceID = "game-server-1"
-    ResourceGameServer2  ResourceID = "game-server-2"
-    ResourceGateway      ResourceID = "gateway"
+    ResourcePostgres    ResourceID = "postgres"
+    ResourceRedis       ResourceID = "redis"
+    ResourceRoomService ResourceID = "room-service"
+    ResourceRuntime     ResourceID = "runtime"      // any game-server
+    ResourceGateway     ResourceID = "gateway"
 )
 
 type Infrastructure interface {
     Endpoint(id ResourceID) (string, error)
     Process(id ResourceID) (*os.Process, error)
+    ProcessByIndex(id ResourceID, n int) (*os.Process, error)
     Database(id ResourceID) (string, error)
+    RuntimeNodes() int
     DialServices(ids ...ResourceID) error
     Close() error
 }
 ```
 
-Typed identifiers provide type safety. Future services only require new `ResourceID` constants — zero interface changes.
+Resource identifiers represent **types**, not deployment instances. `ResourceRuntime` + `ProcessByIndex(ResourceRuntime, 0)` replaces ResourceGameServer1/ResourceGameServer2. Adding a 3rd runtime node requires zero framework changes — the harness simply returns it from RuntimeNodes().
 
 ### Scenario Definition
 
@@ -140,8 +141,17 @@ type ScenarioMetadata struct {
     Tags             []string
     Severity         Severity
     Mode             ExecutionMode
+    Requirements     Requirements
     Timeout          time.Duration
     ExpectedBehavior string
+}
+
+type Requirements struct {
+    MinRuntimeNodes int
+    ComposeRequired bool
+    PostgreSQL      bool
+    Redis           bool
+    NetworkFaults   bool
 }
 
 type SetupFunc func(t *testing.T) (Infrastructure, func(), error)
@@ -158,6 +168,18 @@ type ScenarioDefinition struct {
 ```
 
 Scenarios are pure data. No logic lives in definitions. The Runner is unchanged as scenarios grow.
+
+### Scenario Requirements & Skippable
+
+```go
+// CheckRequirements verifies the current environment satisfies a scenario's needs.
+// If not, the scenario is reported as SKIPPED (not FAILED).
+func CheckRequirements(infra Infrastructure, req Requirements) (met bool, reason string)
+```
+
+If minimum runtime nodes are unavailable, or Docker Compose is required but not running, the
+scenario is skipped, not failed. This makes the framework portable across CI, local development,
+and future deployment environments.
 
 ### Injector
 
@@ -244,8 +266,23 @@ Built-in reporters: `JSONReporter`, `MarkdownReporter`.
 ## Runner Lifecycle
 
 ```
-Setup(ctx) → Injector.Inject(ctx) → RecoveryWaiter.Wait(ctx) → Observers.Observe(ctx)
-    → Validators.Validate(evidence) → Reporter.Generate(report) → Teardown(cleanup)
+Setup(ctx)
+    ↓
+CheckRequirements(infra, req)
+    ├── unmet → OutcomeSkipped (skip remaining phases)
+    └── met
+            ↓
+        Injector.Inject(ctx)
+            ↓
+        RecoveryWaiter.Wait(ctx)
+            ↓
+        Observers.Observe(ctx)
+            ↓
+        Validators.Validate(evidence)
+            ↓
+        Reporter.Generate(report)
+            ↓
+        Teardown(cleanup)
 ```
 
 The Runner orchestrates. It owns no business logic. Every phase delegates to the scenario's configured interfaces.
@@ -295,10 +332,11 @@ type FrameworkMeta struct {
 type Outcome string
 
 const (
-    OutcomePassed  Outcome = "passed"
-    OutcomeFailed  Outcome = "failed"
+    OutcomePassed   Outcome = "passed"
+    OutcomeFailed   Outcome = "failed"
+    OutcomeSkipped  Outcome = "skipped"
     OutcomeTimedOut Outcome = "timed_out"
-    OutcomeError   Outcome = "error"
+    OutcomeError    Outcome = "error"
 )
 
 type ValidationReport struct {
@@ -317,32 +355,76 @@ Framework metadata (version, timestamp) enables future cross-run comparison and 
 
 ---
 
-## Scenario Registry
+## Report Summary
+
+In addition to per-scenario reports, an execution summary aggregates across all scenarios:
 
 ```go
-func Register(s ScenarioDefinition)
-func All() []ScenarioDefinition
-func Filter(tags ...string) []ScenarioDefinition
-```
+type SummaryReport struct {
+    Framework     FrameworkMeta
+    ExecTimestamp time.Time
+    Total         int
+    Passed        int
+    Failed        int
+    Skipped       int
+    TimedOut      int
+    Errors        int
+    TotalDuration time.Duration
+    Recovery      struct {
+        Count       int
+        MinDuration time.Duration
+        MaxDuration time.Duration
+        MeanDuration time.Duration
+    }
+    Invariants struct {
+        Total     int
+        Passed    int
+        Failed    int
+    }
+    Scenarios []SummaryEntry
+}
 
-Scenarios self-register via `init()`:
-
-```go
-func init() {
-    validation.Register(ScenarioDefinition{
-        Metadata: ScenarioMetadata{
-            Name: "gateway-crash",
-            // ...
-        },
-        Injector:  &injectors.ProcessCrash{Resource: ResourceGateway},
-        Recovery:  &recovery.CompositeWaiter{...},
-        Observers: []Observer{&observers.State{}, &observers.Routing{}},
-        Validators: []Validator{&validators.Entity{}, &validators.Ownership{}},
-    })
+type SummaryEntry struct {
+    Name     string
+    Outcome  Outcome
+    Duration time.Duration
+    Reason   string // "requirements not met: ComposeRequired" for skipped
 }
 ```
 
-Adding a new scenario adds zero code to the Runner.
+The summary is CI-optimized: compact enough for pipeline output, while detailed per-scenario reports remain available for debugging.
+
+---
+
+## Scenario Catalog
+
+```go
+func ChaosScenarios() []ScenarioDefinition
+func IntegrationScenarios() []ScenarioDefinition
+```
+
+Scenarios are registered explicitly by returning a slice from a named function.
+The test runner calls `ChaosScenarios()` and iterates. No `init()` magic — deterministic, explicit, debuggable.
+
+```go
+func ChaosScenarios() []ScenarioDefinition {
+    return []ScenarioDefinition{
+        {
+            Metadata: ScenarioMetadata{
+                Name: "gateway-crash",
+                // ...
+            },
+            Injector:  &injectors.ProcessCrash{Resource: ResourceGateway},
+            Recovery:  &recovery.CompositeWaiter{...},
+            Observers: []Observer{&observers.State{}, &observers.Routing{}},
+            Validators: []Validator{&validators.Entity{}, &validators.Ownership{}},
+        },
+        // ...
+    }
+}
+```
+
+Adding a new scenario adds one entry to the slice. The Runner never changes.
 
 ---
 
@@ -397,7 +479,7 @@ Build-tag gated. Zero-cost in production. Observers call `Snapshot()` through th
 
 | Layer | Files | Purpose |
 |-------|-------|---------|
-| Core | 5 | runner, scenario, registry, measure, report |
+| Core | 4 | runner, scenario, measure, report |
 | Harness | 1 | single infrastructure harness |
 | Injectors | 4 | process, network, infrastructure, resource |
 | Validators | 5 | entity, ownership, aoi, session, scheduler |
@@ -405,7 +487,29 @@ Build-tag gated. Zero-cost in production. Observers call `Snapshot()` through th
 | Recovery | 2 | waiter, conditions |
 | Probes | 1 | game snapshot (build-tag gated) |
 | Tests | 2 | scenario definitions, test entry point |
-| **Total** | **23** | |
+| **Total** | **22** | |
+
+---
+
+## Architecture Freeze
+
+The Validation Framework architecture is frozen as of this document.
+
+From this point forward:
+- Do not redesign package boundaries.
+- Do not introduce new framework abstractions.
+- Do not refactor the execution engine.
+
+Future work may only add:
+- Scenario definitions (entries in `ChaosScenarios()`, etc.)
+- Injectors (new files in `internal/validation/injectors/`)
+- Recovery conditions (new files in `internal/validation/recovery/`)
+- Observers (new files in `internal/validation/observers/`)
+- Validators (new files in `internal/validation/validators/`)
+- Reporters (new files, implementing the `Reporter` interface)
+
+The core framework — `runner.go`, `scenario.go`, `measure.go`, `report.go` — must remain stable
+for the lifetime of the project.
 
 ---
 
