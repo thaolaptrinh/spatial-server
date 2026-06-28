@@ -150,10 +150,12 @@ golangci-lint run ./...
 | Phase | Focus | Status |
 |---|---|---|
 | 0 | Architecture & ADRs | ✅ Complete |
-| 1 | Core infrastructure (scaffold, DB, config, logging, protobuf, Gateway, Room Service, Game Server, Docker Compose, CI) | 🔧 In Progress |
-| 2 | Realtime features (AOI, position sync, entity spawn/despawn, zone crossing, chat) | 📋 Planned |
-| 3 | Distributed scaling (multi-Game Server, zone transfer, heartbeat, leader election, rebalancing, metrics) | 📋 Planned |
-| 4 | Production hardening (K3s, HPA, load testing, chaos testing, TLS, monitoring alerts) | 📋 Planned |
+| 1 | Core scaffolding — service binaries, types, packet protocol, WebSocket relay, game loop, AOI, `make demo` | ✅ Complete |
+| 2 | Production readiness — PostgreSQL persistence, SpatialServerAPI, integration tests, config standardization | ✅ Complete |
+| 3 | Realtime features — NPC simulation (patrol/idle/wander), EntityAction/EntityState, zone snapshots, Prometheus metrics, gRPC interceptors | ✅ Complete |
+| 4 | Distributed scaling — zone transfer (PrepareTransfer), entity migration (MigrateEntityIn/Out), cross-server AOI, heartbeat sweeper | ✅ Complete |
+| 5 | Validation framework — chaos/integration/benchmark engine, process & compose injectors, 15 chaos scenarios, 5 validators | ✅ Complete |
+| 6 | Production hardening — TLS/mTLS, K3s + Helm, rate limiting, session resumption, autoscaling, OpenTelemetry | 📋 Planned |
 
 ## License
 
