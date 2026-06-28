@@ -104,8 +104,7 @@ const (
 
 type Infrastructure interface {
     Endpoint(id ResourceID) (string, error)
-    Process(id ResourceID) (*os.Process, error)
-    ProcessByIndex(id ResourceID, n int) (*os.Process, error)
+    Processes(id ResourceID) ([]*os.Process, error)  // all processes of a resource type
     Database(id ResourceID) (string, error)
     RuntimeNodes() int
     DialServices(ids ...ResourceID) error
@@ -113,7 +112,7 @@ type Infrastructure interface {
 }
 ```
 
-Resource identifiers represent **types**, not deployment instances. `ResourceRuntime` + `ProcessByIndex(ResourceRuntime, 0)` replaces ResourceGameServer1/ResourceGameServer2. Adding a 3rd runtime node requires zero framework changes — the harness simply returns it from RuntimeNodes().
+Resource identifiers represent **types**, not deployment instances. `Processes(ResourceRuntime)` returns all runtime processes. Injectors iterate the slice — no index-based fragility, no ordering assumptions. Adding a 3rd runtime node requires zero framework changes.
 
 ### Scenario Definition
 
@@ -217,8 +216,16 @@ Built-in conditions: `HeartbeatRestored`, `HealthyEndpoint`, `OwnershipStabilize
 ### Observer
 
 ```go
+type ObservationPhase string
+
+const (
+    PhaseBaseline     ObservationPhase = "baseline"
+    PhasePostRecovery ObservationPhase = "post_recovery"
+)
+
 type Evidence struct {
     Timestamp time.Time
+    Phase     ObservationPhase
     Source    string   // observer name
     Kind      string   // "state", "metric", "event"
     Key       string
@@ -227,29 +234,41 @@ type Evidence struct {
 
 type Observer interface {
     Name() string
-    Observe(ctx context.Context, infra Infrastructure) ([]Evidence, error)
+    Observe(ctx context.Context, phase ObservationPhase, infra Infrastructure) ([]Evidence, error)
 }
 ```
 
-Observers collect evidence. They do not judge correctness. Evidence is timestamped and attributed.
+Observers collect evidence at both baseline and post-recovery phases. They do not judge correctness.
+Evidence is timestamped, phase-tagged, and attributed to its source observer.
 
 ### Validator
 
 ```go
+type ValidationStatus string
+
+const (
+    StatusPass ValidationStatus = "pass"
+    StatusFail ValidationStatus = "fail"
+    StatusWarn ValidationStatus = "warn"
+    StatusSkip ValidationStatus = "skip"
+)
+
 type ValidationResult struct {
     Validator       string
-    Passed          bool
-    EvidenceIndices []int    // indices into report.Evidence array
+    Status          ValidationStatus
+    EvidenceIndices []int    // indices into combined report.Evidence array
     Detail          string   // human-readable explanation
 }
 
 type Validator interface {
     Name() string
-    Validate(evidence []Evidence) ValidationResult
+    Validate(baseline, postRecovery []Evidence) ValidationResult
 }
 ```
 
-Validators evaluate evidence. Every PASS/FAIL cites supporting evidence by index. Reports answer "why?" without reading logs.
+Validators receive both baseline and post-recovery evidence for comparison.
+Rich status (pass/fail/warn/skip) enables advisory validations without failing entire scenarios.
+Every result cites supporting evidence by index. Reports answer "why?" without reading logs.
 
 ### Reporter
 
@@ -272,18 +291,23 @@ CheckRequirements(infra, req)
     ├── unmet → OutcomeSkipped (skip remaining phases)
     └── met
             ↓
-        Injector.Inject(ctx)
+        Observers.Observe(ctx)          ← baseline evidence
             ↓
-        RecoveryWaiter.Wait(ctx)
+        Injector.Inject(ctx)            ← apply fault
             ↓
-        Observers.Observe(ctx)
+        RecoveryWaiter.Wait(ctx)        ← wait for recovery
             ↓
-        Validators.Validate(evidence)
+        Observers.Observe(ctx)          ← post-recovery evidence
+            ↓
+        Validators.Validate(baseline, postRecovery)
             ↓
         Reporter.Generate(report)
             ↓
         Teardown(cleanup)
 ```
+
+Baseline evidence enables validators to compare before/after state.
+Observers track `ObservationPhase` ("baseline" vs "post-recovery") in evidence timestamps.
 
 The Runner orchestrates. It owns no business logic. Every phase delegates to the scenario's configured interfaces.
 
@@ -292,7 +316,7 @@ The Runner orchestrates. It owns no business logic. Every phase delegates to the
 ## Measurement
 
 ```go
-type TickStats struct {
+type TickSummary struct {
     Mean   time.Duration
     P50    time.Duration
     P95    time.Duration
@@ -301,22 +325,34 @@ type TickStats struct {
     Count  int
 }
 
-type RecoveryStats struct {
-    Duration           time.Duration
+type RecoverySummary struct {
+    Duration            time.Duration
     OwnershipRestoredAt time.Time
-    FirstHealthyAt     time.Time
+    FirstHealthyAt      time.Time
 }
 
+// Measurement is the single canonical measurement model shared by all validation suites.
+// Chaos, integration, benchmark, load, soak — all report through this struct.
+// Future measurement dimensions extend Measurement; no additional top-level stats structs.
 type Measurement struct {
-    TickDurations    []time.Duration
-    QueueDepths      map[string][]int
-    DropCounts       map[string]int
-    EventCounts      map[string]int
-    Recovery         RecoveryStats
+    Tick      TickSummary
+    Recovery  RecoverySummary
+    Queue     map[string]QueueSnapshot  // "inbox", "events", "cmds"
+    Events    map[string]int            // "spawn", "despawn", "move", "state"
+    Drops     map[string]int            // "inbox", "events", "cmds_add", "cmds_remove"
+    TickDurations []time.Duration       // raw samples (for percentile computation)
+}
+
+type QueueSnapshot struct {
+    Min    int
+    Max    int
+    Mean   float64
+    P95    int
 }
 ```
 
-Shared model. Benchmark, chaos, integration — all report through the same measurement layer.
+Shared model. Benchmark, chaos, integration — all report through this single measurement layer.
+Future measurement dimensions extend `Measurement`; no parallel top-level statistics structures.
 
 ---
 
@@ -340,15 +376,20 @@ const (
 )
 
 type ValidationReport struct {
-    Framework     FrameworkMeta
-    Scenario      ScenarioMetadata
-    Outcome       Outcome
-    Duration      time.Duration
-    Evidence      []Evidence
-    Validations   []ValidationResult
-    Measurement   Measurement
-    RootCause     string
+    Framework       FrameworkMeta
+    Scenario        ScenarioMetadata
+    Outcome         Outcome
+    Duration        time.Duration
+    Baseline        []Evidence
+    PostRecovery    []Evidence
+    Validations     []ValidationResult
+    Measurement     Measurement
+    RootCause       string
 }
+
+// CombinedEvidence returns all evidence sorted by timestamp (baseline + post-recovery).
+// Validator EvidenceIndices reference this combined slice.
+func (r *ValidationReport) CombinedEvidence() []Evidence { ... }
 ```
 
 Framework metadata (version, timestamp) enables future cross-run comparison and regression tracking.
@@ -377,9 +418,11 @@ type SummaryReport struct {
         MeanDuration time.Duration
     }
     Invariants struct {
-        Total     int
-        Passed    int
-        Failed    int
+        Total    int
+        Passed   int
+        Warned   int
+        Failed   int
+        Skipped  int
     }
     Scenarios []SummaryEntry
 }
@@ -399,27 +442,43 @@ The summary is CI-optimized: compact enough for pipeline output, while detailed 
 ## Scenario Catalog
 
 ```go
-func ChaosScenarios() []ScenarioDefinition
-func IntegrationScenarios() []ScenarioDefinition
+// Each suite exports a function returning its scenario definitions.
+// Adding a new suite (load, soak, upgrade, compatibility) requires only a new
+// function — no Runner changes, no interface changes, no package restructuring.
+
+func ChaosScenarios() []ScenarioDefinition       // 15 chaos scenarios
+func IntegrationScenarios() []ScenarioDefinition // integration test scenarios
+// Future: LoadScenarios(), SoakScenarios(), UpgradeScenarios(), CompatibilityScenarios()
 ```
 
 Scenarios are registered explicitly by returning a slice from a named function.
-The test runner calls `ChaosScenarios()` and iterates. No `init()` magic — deterministic, explicit, debuggable.
+The test runner calls the relevant function and iterates. No `init()` magic — deterministic, explicit, debuggable.
 
 ```go
 func ChaosScenarios() []ScenarioDefinition {
     return []ScenarioDefinition{
         {
             Metadata: ScenarioMetadata{
-                Name: "gateway-crash",
-                // ...
+                Name:             "gateway-crash",
+                Description:      "Gateway process crash and recovery",
+                Tags:             []string{"chaos", "gateway", "crash"},
+                Severity:         SeverityHigh,
+                Mode:             ModeProcess,
+                Requirements:     Requirements{PostgreSQL: true, Redis: true},
+                Timeout:          2 * time.Minute,
+                ExpectedBehavior: "Gateway reconnects, routing cache repopulates, all clients remain connected",
             },
-            Injector:  &injectors.ProcessCrash{Resource: ResourceGateway},
-            Recovery:  &recovery.CompositeWaiter{...},
-            Observers: []Observer{&observers.State{}, &observers.Routing{}},
+            Setup:      SingleNodeSetup,
+            Injector:   &injectors.ProcessCrash{Target: ResourceGateway},
+            Recovery:   recovery.NewComposite(recovery.ModeAll,
+                recovery.HealthyEndpoint(ResourceGateway),
+                recovery.HealthyEndpoint(ResourceRoomService),
+            ),
+            Observers:  []Observer{&observers.State{}, &observers.Routing{}},
             Validators: []Validator{&validators.Entity{}, &validators.Ownership{}},
+            Reporter:   &reporting.JSONReporter{},
         },
-        // ...
+        // 14 more scenarios...
     }
 }
 ```
