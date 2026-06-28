@@ -18,6 +18,7 @@ internal/           Service implementation + shared infrastructure (not importab
   metrics/          Prometheus metrics
   types/            Shared types (IDs, Vector3, statuses, errors)
   migration/        Migration runner
+  validation/       Validation Framework — reusable engine for chaos, integration, benchmark, load, soak
 pkg/
   protocol/         Binary packet protocol (ONLY pkg/ — external reuse)
 proto/             gRPC protobuf definitions (.proto + gen/ for generated code)
@@ -26,7 +27,12 @@ build/docker/      Dockerfiles
 deploy/            Docker Compose
 docs/              All documentation (architecture, ADRs, standards, ops, testing)
 scripts/           dev-up.sh, dev-down.sh
-tests/             Integration tests
+tests/             Integration, validation, chaos, fuzz, security
+  integration/      Integration tests (Testcontainers)
+  validation/       Chaos scenario definitions (15 scenarios, build tag: validation)
+  chaos/            Chaos tests (build tag: chaos)
+  fuzz/             Fuzz tests
+  security/         Security tests
 tools/             CLI tools (client)
 ```
 

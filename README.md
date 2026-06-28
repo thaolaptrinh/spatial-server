@@ -87,9 +87,15 @@ Reusable distributed realtime spatial server platform for 3D Showroom, Virtual O
 ├── deploy/             # Docker Compose (dev)
 ├── infra/              # Helm charts + Terraform
 ├── scripts/            # dev-up.sh, dev-down.sh
-├── tests/              # Integration tests (Testcontainers)
+├── tests/              # Integration, validation, chaos, fuzz, security
+│   ├── integration/    # Integration tests (Testcontainers)
+│   ├── validation/     # Chaos scenario definitions (15 scenarios, build tag: validation)
+│   ├── chaos/          # Chaos tests (build tag: chaos)
+│   ├── fuzz/           # Fuzz tests
+│   └── security/       # Security tests
 ├── benchmarks/         # Load / simulation framework
 ├── tools/              # CLI tools (client)
+├── artifacts/          # Build output (gitignored)
 └── docs/               # Architecture, ADRs, standards, ops, testing
 ```
 
@@ -121,10 +127,22 @@ Room Service and Game Server binaries on startup (via `internal/migration`). The
 standalone migrate CLI; to apply migrations manually, run a service binary or use the
 `golang-migrate` CLI directly against that directory.
 
-### Build
+### Build & Test
 
 ```bash
 make build
+
+# Unit tests
+go test ./internal/... -v -race -cover
+
+# Integration tests (Testcontainers)
+go test -tags=integration -count=1 -timeout=120s ./tests/integration/...
+
+# Chaos tests (requires Docker)
+go test -tags=validation -run TestProcessChaosScenarios -count=1 -timeout=30m ./tests/validation/
+
+# Lint
+golangci-lint run ./...
 ```
 
 ## Development Phases

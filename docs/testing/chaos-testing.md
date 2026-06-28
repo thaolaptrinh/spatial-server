@@ -95,13 +95,13 @@ Define the chaos testing approach for validating Spatial Server resilience under
 | iptables | Network partition simulation | Built-in (Linux) |
 | tc/netem | Latency and packet loss injection | `iproute2` package |
 | pumba | Docker container chaos | `docker run gaiaadm/pumba` |
-| Custom chaos scripts | Automated scenario execution | `test/chaos/` directory |
+| Custom chaos scripts | Automated scenario execution | `tests/chaos/` directory |
 
 ## Scripted Chaos Test Example
 
 ```bash
 #!/bin/bash
-# test/chaos/partition-gateway.sh
+# tests/chaos/partition-gateway.sh
 
 GATEWAY_IP=$1
 ROOM_SERVICE_IP=$2

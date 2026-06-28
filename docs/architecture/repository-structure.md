@@ -51,6 +51,9 @@ spatial-server/
 ├── deploy/docker-compose/        # Local dev Docker Compose
 ├── scripts/                      # dev-up.sh, dev-down.sh
 ├── tests/integration/            # Integration tests (realtime flow)
+├── tests/chaos/                  # Chaos tests (scripted)
+├── tests/fuzz/                   # Fuzz tests
+├── tests/security/               # Security tests
 ├── tools/client/                 # WebSocket test CLI
 ├── docs/                         # Architecture, ADRs, standards, ops, testing
 ├── go.mod / go.sum
@@ -98,7 +101,6 @@ spatial-server/
 |-----------|---------|-----------|
 | `infra/` | Infrastructure as Code: Terraform, Helm charts, cloud-init | [ADR-008](../adr/008-deployment.md), [ADR-014](../adr/014-infrastructure-platform.md) |
 | `tests/load/` | Load tests (k6 + WebSocket clients) | [ADR-020](../adr/020-benchmark-strategy.md) |
-| `tests/chaos/` | Chaos tests (network partitions, crash recovery) | [ADR-020](../adr/020-benchmark-strategy.md) |
 
 ## Dependency Rules
 

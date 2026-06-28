@@ -13,7 +13,7 @@ Define the testing approach for Spatial Server at all levels.
 | **Unit** | Individual packages | `go test`, table-driven | Every commit |
 | **Integration** | Service + DB (PostgreSQL, Redis) | `tests/integration/` with Testcontainers | Every PR |
 | **Load** | Gateway + Game Server under load | k6 + custom WebSocket client | Per milestone |
-| **Chaos** | Network partitions, crash recovery | `test/chaos/` (scripted) | Pre-release |
+| **Chaos** | Network partitions, crash recovery | `tests/chaos/` (scripted) | Pre-release |
 | **Benchmark** | AOI queries, RPC serialization | `go test -bench=.` | Per commit |
 
 ## Test Targets by Service
