@@ -205,8 +205,32 @@ type Evidence struct {
 	Value     string
 }
 
+// ── Evidence lookup helper ──────────────────────────────────────────────
+
+// EvidenceIndex builds an indexed lookup from evidence, avoiding repeated
+// linear scans in validators. Returns -1 if key not found.
+func EvidenceIndex(evidence []Evidence, key string) int {
+	for i, e := range evidence {
+		if e.Key == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// ── Observer policy ─────────────────────────────────────────────────────
+
+// ObserverPolicy controls whether a failed observer aborts the scenario.
+type ObserverPolicy string
+
+const (
+	PolicyRequired ObserverPolicy = "required" // error aborts scenario (default)
+	PolicyOptional ObserverPolicy = "optional" // error generates warning evidence only
+)
+
 type Observer interface {
 	Name() string
+	Policy() ObserverPolicy
 	Observe(ctx context.Context, phase ObservationPhase, infra Infrastructure) ([]Evidence, error)
 }
 
@@ -675,6 +699,10 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 	}
 	defer func() { _ = sc.Injector.Recover(context.Background(), infra) }()
 
+	// Recovery duration: starts immediately after Inject() succeeds,
+	// ends when RecoveryWaiter.Wait() returns. Populated even on failure.
+	// Recovery duration: starts immediately after Inject() succeeds,
+	// ends when RecoveryWaiter.Wait() returns. Populated even on failure.
 	recoverStart := time.Now()
 	recoveryErr := sc.Recovery.Wait(scopedCtx, infra)
 	report.Measurement.Recovery.Duration = time.Since(recoverStart)
@@ -687,7 +715,7 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 			report.Outcome = OutcomeError
 			report.RootCause = fmt.Sprintf("recovery: %v", recoveryErr)
 		}
-		return report
+		// Do not return early — proceed to observe + validate anyway.
 	}
 
 	postRecovery, err := observeAll(scopedCtx, PhasePostRecovery, sc.Observers, infra)
@@ -716,6 +744,8 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 		report.Outcome = OutcomeFailed
 	}
 
+	evaluateAcceptance(report, sc.Acceptance)
+
 	if sc.Reporter != nil {
 		_ = sc.Reporter.Generate(report)
 	}
@@ -723,12 +753,34 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 	return report
 }
 
+func evaluateAcceptance(report *ValidationReport, ac AcceptanceCriteria) {
+	if ac.RecoveryDuration > 0 && report.Measurement.Recovery.Duration > ac.RecoveryDuration {
+		report.Validations = append(report.Validations, ValidationResult{
+			Validator: "acceptance", Status: StatusWarn,
+			Detail: fmt.Sprintf("recovery %v exceeds acceptance %v", report.Measurement.Recovery.Duration, ac.RecoveryDuration),
+		})
+	}
+	if ac.TickP95 > 0 && report.Measurement.Tick.P95 > ac.TickP95 {
+		report.Validations = append(report.Validations, ValidationResult{
+			Validator: "acceptance", Status: StatusWarn,
+			Detail: fmt.Sprintf("tick p95 %v exceeds acceptance %v", report.Measurement.Tick.P95, ac.TickP95),
+		})
+	}
+}
+
 func observeAll(ctx context.Context, phase ObservationPhase, observers []Observer, infra Infrastructure) ([]Evidence, error) {
 	var all []Evidence
 	for _, o := range observers {
 		e, err := o.Observe(ctx, phase, infra)
 		if err != nil {
-			return nil, fmt.Errorf("%s(%s): %w", o.Name(), phase, err)
+			if o.Policy() == PolicyRequired {
+				return nil, fmt.Errorf("%s(%s): %w", o.Name(), phase, err)
+			}
+			all = append(all, Evidence{
+				Timestamp: time.Now(), Phase: phase, Source: o.Name(),
+				Kind: "error", Key: "observer-error", Value: err.Error(),
+			})
+			continue
 		}
 		all = append(all, e...)
 	}
@@ -764,11 +816,16 @@ func (i *testInjector) Inject(ctx context.Context, infra Infrastructure) error  
 func (i *testInjector) Recover(ctx context.Context, infra Infrastructure) error { i.injected = false; return nil }
 
 type testObserver struct {
-	name string
-	fn   func(ObservationPhase) []Evidence
+	name   string
+	fn     func(ObservationPhase) []Evidence
+	policy ObserverPolicy
 }
 
-func (o *testObserver) Name() string { return o.name }
+func (o *testObserver) Name() string             { return o.name }
+func (o *testObserver) Policy() ObserverPolicy    {
+	if o.policy == "" { return PolicyRequired }
+	return o.policy
+}
 func (o *testObserver) Observe(ctx context.Context, phase ObservationPhase, infra Infrastructure) ([]Evidence, error) {
 	return o.fn(phase), nil
 }
@@ -911,7 +968,8 @@ import (
 
 type State struct{}
 
-func (o *State) Name() string { return "state" }
+func (o *State) Name() string           { return "state" }
+func (o *State) Policy() validation.ObserverPolicy { return validation.PolicyRequired }
 
 func (o *State) Observe(ctx context.Context, phase validation.ObservationPhase, infra validation.Infrastructure) ([]validation.Evidence, error) {
 	now := time.Now()
@@ -947,7 +1005,8 @@ import (
 
 type Routing struct{}
 
-func (o *Routing) Name() string { return "routing" }
+func (o *Routing) Name() string            { return "routing" }
+func (o *Routing) Policy() validation.ObserverPolicy { return validation.PolicyOptional }
 
 func (o *Routing) Observe(ctx context.Context, phase validation.ObservationPhase, infra validation.Infrastructure) ([]validation.Evidence, error) {
 	now := time.Now()
@@ -981,7 +1040,8 @@ import (
 
 type Metrics struct{}
 
-func (o *Metrics) Name() string { return "metrics" }
+func (o *Metrics) Name() string            { return "metrics" }
+func (o *Metrics) Policy() validation.ObserverPolicy { return validation.PolicyOptional }
 
 func (o *Metrics) Observe(ctx context.Context, phase validation.ObservationPhase, infra validation.Infrastructure) ([]validation.Evidence, error) {
 	return []validation.Evidence{
@@ -1381,7 +1441,7 @@ type processHarness struct {
 	pgDSN     string
 	redisAddr string
 	endpoints map[validation.ResourceID]string
-	processes map[string]*os.Process
+	processes map[validation.ResourceID][]*os.Process
 	cleanups  []func()
 	mu        sync.Mutex
 }
@@ -1405,7 +1465,7 @@ func StartStack(t *testing.T) (*processHarness, func()) {
 	ctx := context.Background()
 	h := &processHarness{
 		endpoints: make(map[validation.ResourceID]string),
-		processes: make(map[string]*os.Process),
+		processes: make(map[validation.ResourceID][]*os.Process),
 	}
 	pgC, err := postgres.Run(ctx, "postgres:16-alpine",
 		postgres.WithDatabase("spatial"),
@@ -1452,14 +1512,7 @@ func (h *processHarness) Endpoint(id validation.ResourceID) (string, error) {
 func (h *processHarness) Processes(id validation.ResourceID) ([]*os.Process, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	var procs []*os.Process
-	prefix := string(id)
-	for name, p := range h.processes {
-		if strings.HasPrefix(name, prefix) {
-			procs = append(procs, p)
-		}
-	}
-	return procs, nil
+	return h.processes[id], nil
 }
 
 func (h *processHarness) Database(id validation.ResourceID) (string, error) {
@@ -1472,13 +1525,7 @@ func (h *processHarness) Database(id validation.ResourceID) (string, error) {
 func (h *processHarness) RuntimeNodes() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	count := 0
-	for name := range h.processes {
-		if strings.HasPrefix(name, string(validation.ResourceRuntime)) {
-			count++
-		}
-	}
-	return count
+	return len(h.processes[validation.ResourceRuntime])
 }
 
 func (h *processHarness) DialServices(ids ...validation.ResourceID) error {
@@ -1505,7 +1552,7 @@ func (h *processHarness) StartRoomService(t *testing.T) {
 	cmd.Stdout, cmd.Stderr = f, f
 	require.NoError(t, cmd.Start())
 	h.mu.Lock()
-	h.processes[string(validation.ResourceRoomService)] = cmd.Process
+	h.processes[validation.ResourceRoomService] = append(h.processes[validation.ResourceRoomService], cmd.Process)
 	h.endpoints[validation.ResourceRoomService] = "127.0.0.1:19000"
 	h.mu.Unlock()
 	h.cleanups = append(h.cleanups, func() { killProcess(cmd); os.Remove(binPath); f.Close() })
@@ -1515,7 +1562,6 @@ func (h *processHarness) StartRoomService(t *testing.T) {
 func (h *processHarness) StartGameServer(t *testing.T, index int) {
 	t.Helper()
 	binPath := buildService(t, "game-server")
-	name := fmt.Sprintf("%s-%d", validation.ResourceRuntime, index)
 	port := 19001 + index
 	root := moduleRoot()
 	logPath := filepath.Join(os.TempDir(), fmt.Sprintf("spatial-game-server-%d-%d.log", index, time.Now().UnixNano()))
@@ -1527,8 +1573,7 @@ func (h *processHarness) StartGameServer(t *testing.T, index int) {
 	cmd.Stdout, cmd.Stderr = f, f
 	require.NoError(t, cmd.Start())
 	h.mu.Lock()
-	h.processes[name] = cmd.Process
-	h.endpoints[validation.ResourceID(name)] = fmt.Sprintf("127.0.0.1:%d", port)
+	h.processes[validation.ResourceRuntime] = append(h.processes[validation.ResourceRuntime], cmd.Process)
 	h.mu.Unlock()
 	h.cleanups = append(h.cleanups, func() { killProcess(cmd); os.Remove(binPath); f.Close() })
 	waitForGRPC(t, fmt.Sprintf("127.0.0.1:%d", port), 30*time.Second)
@@ -1547,7 +1592,7 @@ func (h *processHarness) StartGateway(t *testing.T) {
 	cmd.Stdout, cmd.Stderr = f, f
 	require.NoError(t, cmd.Start())
 	h.mu.Lock()
-	h.processes[string(validation.ResourceGateway)] = cmd.Process
+	h.processes[validation.ResourceGateway] = append(h.processes[validation.ResourceGateway], cmd.Process)
 	h.endpoints[validation.ResourceGateway] = "127.0.0.1:18080"
 	h.mu.Unlock()
 	h.cleanups = append(h.cleanups, func() { killProcess(cmd); os.Remove(binPath); f.Close() })
@@ -2608,7 +2653,7 @@ Expected: 8 compose scenarios run against live stack.
 
 Compose-mode injectors (`network.go`, `infrastructure.go`, `resource.go`) are **intentional placeholders** during this milestone. Each returns `fmt.Errorf("requires Docker Compose execution mode")` on `Inject()`.
 
-**Roadmap note** — these will be replaced by real Docker SDK implementations in a future milestone:
+**Roadmap note** — to be replaced in the Phase 3 "Production Hardening" milestone (`docs/superpowers/specs/phase-6-production-hardening.md`):
 - `NetLatency`/`NetLoss`/`NetPartition` → Docker SDK container exec + `tc netem` / `iptables`
 - `InfraRestart` → Docker SDK `ContainerRestart`
 - `ResourceCPU`/`ResourceMemory` → Docker SDK `ContainerUpdate` with cgroup limits
@@ -2636,6 +2681,35 @@ No current scenario relies on these injectors succeeding. All compose scenarios 
 
 ---
 
+## Harness Cleanup Order
+
+Cleanup must execute in this exact order to prevent resource leaks:
+
+1. **Recover faults** — `Injector.Recover()` (guaranteed by Runner `defer`)
+2. **Stop services** — SIGTERM each process, 10s grace, SIGKILL
+3. **Terminate containers** — Testcontainers `Terminate()`
+4. **Close log files** — `f.Close()`
+5. **Delete temporary binaries** — `os.Remove(binPath)`
+
+The `cleanups` slice in `processHarness` is executed in reverse append order (LIFO),
+ensuring teardown mirrors setup.
+
+---
+
+## Scenario Registration
+
+Scenarios are registered **explicitly** by returning slices from named functions:
+`ProcessScenarios(t)`, `ComposeScenarios()`. There is no global registry.
+
+- **Duplicate IDs:** Tests use `t.Run(id, ...)` — Go's subtests panic on duplicate names.
+  This is intentional: duplicate scenario IDs are a programmer error caught at test time.
+- **Registration timing:** `ProcessScenarios()` is called at test invocation, not via `init()`.
+  Order is deterministic, debuggable.
+- **No dynamic registration:** Adding a scenario means adding one entry to the slice.
+  No framework changes required.
+
+---
+
 ## Artifact Layout
 
 Every validation run produces a standardized artifact directory:
@@ -2651,9 +2725,15 @@ artifacts/
 
 | Phase | Artifact | Location |
 |-------|----------|----------|
-| 12 | Process chaos reports | `artifacts/reports/process-chaos-report.txt` |
-| 13 | Compose chaos reports | `artifacts/reports/compose-chaos-report.txt` |
+| 12 | Process chaos reports | `artifacts/reports/process-chaos-report.txt`, `artifacts/reports/process-chaos-summary.json` |
+| 13 | Compose chaos reports | `artifacts/reports/compose-chaos-report.txt`, `artifacts/reports/compose-chaos-summary.json` |
 | 14 | Final Chaos Engineering report | `docs/testing/chaos-report.md` |
+
+Per-scenario reports use the scenario ID as filename stem:
+- `artifacts/reports/runtime-crash.md`
+- `artifacts/reports/runtime-crash.json`
+- `artifacts/reports/summary.json`
+- `artifacts/reports/summary.md`
 
 ---
 
