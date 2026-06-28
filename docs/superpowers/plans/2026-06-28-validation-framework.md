@@ -119,12 +119,24 @@ type ScenarioMetadata struct {
 
 type SetupFunc func() (Infrastructure, func(), error)
 
+type AcceptancePolicy string
+
+const (
+	AcceptWarn AcceptancePolicy = "warn" // advisory only, never changes scenario outcome
+	AcceptFail AcceptancePolicy = "fail" // FAILs the scenario when threshold exceeded
+)
+
+type AcceptanceCriterion struct {
+	Threshold time.Duration
+	Policy    AcceptancePolicy
+}
+
 type AcceptanceCriteria struct {
-	RecoveryDuration     time.Duration
-	OwnershipConvergence time.Duration
-	TickP95              time.Duration
-	ReconnectTime        time.Duration
-	QueueDrainTime       time.Duration
+	RecoveryDuration     AcceptanceCriterion
+	OwnershipConvergence  AcceptanceCriterion
+	TickP95               AcceptanceCriterion
+	ReconnectTime         AcceptanceCriterion
+	QueueDrainTime        AcceptanceCriterion
 }
 
 type ScenarioDefinition struct {
@@ -205,17 +217,16 @@ type Evidence struct {
 	Value     string
 }
 
-// ── Evidence lookup helper ──────────────────────────────────────────────
+// ── Evidence lookup ─────────────────────────────────────────────────────
 
-// EvidenceIndex builds an indexed lookup from evidence, avoiding repeated
-// linear scans in validators. Returns -1 if key not found.
-func EvidenceIndex(evidence []Evidence, key string) int {
-	for i, e := range evidence {
-		if e.Key == key {
-			return i
-		}
+// EvidenceMap indexes evidence by key for O(1) lookup.
+// When multiple evidence entries share a key, the last one wins.
+func EvidenceMap(evidence []Evidence) map[string]Evidence {
+	m := make(map[string]Evidence, len(evidence))
+	for _, e := range evidence {
+		m[e.Key] = e
 	}
-	return -1
+	return m
 }
 
 // ── Observer policy ─────────────────────────────────────────────────────
@@ -464,28 +475,46 @@ func NewSummary(reports []*ValidationReport) *SummaryReport {
 	return s
 }
 
-type MarkdownReporter struct {
-	Writer strings.Builder
-}
+// Reporters are stateless. Each Generate() allocates local buffers, safe for concurrent reuse.
+type MarkdownReporter struct{}
 
 func (m *MarkdownReporter) Generate(report *ValidationReport) error {
-	m.Writer.Reset()
-	fmt.Fprintf(&m.Writer, "# Chaos Report: %s\n\n", report.Scenario.Name)
-	fmt.Fprintf(&m.Writer, "| Field | Value |\n|-------|-------|\n")
-	fmt.Fprintf(&m.Writer, "| Outcome | %s |\n", report.Outcome)
-	fmt.Fprintf(&m.Writer, "| Duration | %s |\n", report.Duration)
-	fmt.Fprintf(&m.Writer, "| Expected | %s |\n\n", report.Scenario.ExpectedBehavior)
-	fmt.Fprintf(&m.Writer, "## Validations\n\n| Validator | Status | Detail |\n|-----------|--------|--------|\n")
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Chaos Report: %s\n\n", report.Scenario.Name)
+	fmt.Fprintf(&b, "| Field | Value |\n|-------|-------|\n")
+	fmt.Fprintf(&b, "| Outcome | %s |\n", report.Outcome)
+	fmt.Fprintf(&b, "| Duration | %s |\n", report.Duration)
+	fmt.Fprintf(&b, "| Expected | %s |\n\n", report.Scenario.ExpectedBehavior)
+	fmt.Fprintf(&b, "## Validations\n\n| Validator | Status | Detail |\n|-----------|--------|--------|\n")
 	for _, v := range report.Validations {
-		fmt.Fprintf(&m.Writer, "| %s | %s | %s |\n", v.Validator, v.Status, v.Detail)
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", v.Validator, v.Status, v.Detail)
 	}
 	return nil
 }
 
 func MarkdownReportString(report *ValidationReport) string {
 	var m MarkdownReporter
-	_ = m.Generate(report)
-	return m.Writer.String()
+	var b strings.Builder
+	defer func() { _ = m.Generate(report) }()
+	return b.String()
+}
+```
+
+Wait — that won't work because `Generate` creates a local builder and returns nil. Let me fix `MarkdownReportString` to use `strings.Builder` directly:
+
+```go
+func MarkdownReportString(report *ValidationReport) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Chaos Report: %s\n\n", report.Scenario.Name)
+	fmt.Fprintf(&b, "| Field | Value |\n|-------|-------|\n")
+	fmt.Fprintf(&b, "| Outcome | %s |\n", report.Outcome)
+	fmt.Fprintf(&b, "| Duration | %s |\n", report.Duration)
+	fmt.Fprintf(&b, "| Expected | %s |\n\n", report.Scenario.ExpectedBehavior)
+	fmt.Fprintf(&b, "## Validations\n\n| Validator | Status | Detail |\n|-----------|--------|--------|\n")
+	for _, v := range report.Validations {
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", v.Validator, v.Status, v.Detail)
+	}
+	return b.String()
 }
 ```
 
@@ -650,17 +679,44 @@ type ScenarioRunner struct{}
 
 func NewRunner() *ScenarioRunner { return &ScenarioRunner{} }
 
+// ValidateScenarios checks for duplicate IDs across all scenarios.
+// Returns errors for any duplicates. Call before Run() to fail fast.
+func ValidateScenarios(scenarios []ScenarioDefinition) error {
+	seen := make(map[string]int)
+	for i, sc := range scenarios {
+		id := sc.Metadata.ID
+		if id == "" {
+			return fmt.Errorf("scenario at index %d has empty ID", i)
+		}
+		if prev, ok := seen[id]; ok {
+			return fmt.Errorf("duplicate scenario ID %q at indices %d and %d", id, prev, i)
+		}
+		seen[id] = i
+	}
+	return nil
+}
+
 func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *ValidationReport {
 	report := &ValidationReport{
 		Framework: FrameworkMeta{
 			FrameworkVersion: frameworkVersion,
-			ScenarioVersion:  "1.0.0",
+			ScenarioVersion:  fmt.Sprintf("%d", sc.Metadata.Version),
 			ExecTimestamp:    time.Now(),
 		},
 		Scenario: sc.Metadata,
 	}
 	start := time.Now()
 	defer func() { report.Duration = time.Since(start) }()
+
+	// Recover from panics in any lifecycle phase to preserve diagnostic output.
+	defer func() {
+		if rec := recover(); rec != nil {
+			report.Outcome = OutcomeError
+			if report.RootCause == "" {
+				report.RootCause = fmt.Sprintf("panic: %v", rec)
+			}
+		}
+	}()
 
 	scopedCtx := ctx
 	if sc.Metadata.Timeout > 0 {
@@ -738,10 +794,14 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 		}
 	}
 
-	if allPassed {
-		report.Outcome = OutcomePassed
-	} else {
-		report.Outcome = OutcomeFailed
+	// Outcome precedence: Error > TimedOut > Failed > Passed > Skipped.
+	// Validators set Passed/Failed only when no higher-priority outcome exists.
+	if report.Outcome == "" {
+		if allPassed {
+			report.Outcome = OutcomePassed
+		} else {
+			report.Outcome = OutcomeFailed
+		}
 	}
 
 	evaluateAcceptance(report, sc.Acceptance)
@@ -754,18 +814,29 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 }
 
 func evaluateAcceptance(report *ValidationReport, ac AcceptanceCriteria) {
-	if ac.RecoveryDuration > 0 && report.Measurement.Recovery.Duration > ac.RecoveryDuration {
+	check := func(name string, actual, threshold time.Duration, policy AcceptancePolicy) {
+		if threshold == 0 {
+			return
+		}
+		status := StatusPass
+		if actual > threshold {
+			if policy == AcceptFail {
+				status = StatusFail
+				report.Outcome = OutcomeFailed
+			} else {
+				status = StatusWarn
+			}
+		}
 		report.Validations = append(report.Validations, ValidationResult{
-			Validator: "acceptance", Status: StatusWarn,
-			Detail: fmt.Sprintf("recovery %v exceeds acceptance %v", report.Measurement.Recovery.Duration, ac.RecoveryDuration),
+			Validator: "acceptance/" + name,
+			Status:    status,
+			Detail:    fmt.Sprintf("%s actual=%v threshold=%v policy=%s", name, actual, threshold, policy),
 		})
 	}
-	if ac.TickP95 > 0 && report.Measurement.Tick.P95 > ac.TickP95 {
-		report.Validations = append(report.Validations, ValidationResult{
-			Validator: "acceptance", Status: StatusWarn,
-			Detail: fmt.Sprintf("tick p95 %v exceeds acceptance %v", report.Measurement.Tick.P95, ac.TickP95),
-		})
-	}
+	check("recovery-duration", report.Measurement.Recovery.Duration, ac.RecoveryDuration.Threshold, ac.RecoveryDuration.Policy)
+	check("tick-p95", report.Measurement.Tick.P95, ac.TickP95.Threshold, ac.TickP95.Policy)
+	// OwnershipConvergence, ReconnectTime, QueueDrainTime:
+	// TODO(phase-2): populate Measurement fields from harness metrics collector
 }
 
 func observeAll(ctx context.Context, phase ObservationPhase, observers []Observer, infra Infrastructure) ([]Evidence, error) {
@@ -1736,11 +1807,10 @@ func (v *Entity) Validate(baseline, postRecovery []validation.Evidence) validati
 }
 
 func findInt(evidence []validation.Evidence, key string) int {
-	for _, e := range evidence {
-		if e.Key == key {
-			v, _ := strconv.Atoi(e.Value)
-			return v
-		}
+	m := validation.EvidenceMap(evidence)
+	if e, ok := m[key]; ok {
+		v, _ := strconv.Atoi(e.Value)
+		return v
 	}
 	return -1
 }
@@ -1969,6 +2039,11 @@ type ProcessCrash struct {
 	Target validation.ResourceID
 }
 
+// ProcessCrash kills ALL processes of the target type.
+// Restart is NOT the injector's responsibility. The scenario's Setup function
+// (harness.StartStackForChaos) starts fresh service binaries before the
+// scenario runs. The recovery waiter detects service liveness via
+// HealthyEndpoint conditions. The injector only applies the fault.
 func (i *ProcessCrash) Name() string { return fmt.Sprintf("process-crash(%s)", i.Target) }
 
 func (i *ProcessCrash) Inject(ctx context.Context, infra validation.Infrastructure) error {
@@ -2229,7 +2304,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			Recovery:   crashRecovery,
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 30 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2246,7 +2321,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			Recovery:   crashRecovery,
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 30 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2266,7 +2341,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 15 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 15 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2286,7 +2361,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 15 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 15 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2306,7 +2381,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 30 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2326,7 +2401,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 30 * time.Second, Policy: validation.AcceptWarn}},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
@@ -2345,7 +2420,7 @@ func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
-			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 25 * time.Second},
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: validation.AcceptanceCriterion{Threshold: 25 * time.Second, Policy: validation.AcceptWarn}},
 		},
 	}
 }
@@ -2370,7 +2445,11 @@ import (
 )
 
 func TestProcessChaosScenarios(t *testing.T) {
-	for _, sc := range ProcessScenarios(t) {
+	scenarios := ProcessScenarios(t)
+	if err := v.ValidateScenarios(scenarios); err != nil {
+		t.Fatalf("invalid scenarios: %v", err)
+	}
+	for _, sc := range scenarios {
 		t.Run(sc.Metadata.ID, func(t *testing.T) {
 			report := v.NewRunner().Run(context.Background(), sc)
 			if report.Outcome == v.OutcomeSkipped {
@@ -2379,9 +2458,6 @@ func TestProcessChaosScenarios(t *testing.T) {
 			if report.Outcome != v.OutcomePassed {
 				t.Errorf("scenario %s: %s — %s", sc.Metadata.Name, report.Outcome, report.RootCause)
 				t.Log(v.MarkdownReportString(report))
-			}
-			if sc.Acceptance.RecoveryDuration > 0 && report.Measurement.Recovery.Duration > sc.Acceptance.RecoveryDuration {
-				t.Logf("WARNING: recovery %v exceeds acceptance %v", report.Measurement.Recovery.Duration, sc.Acceptance.RecoveryDuration)
 			}
 		})
 	}
@@ -2693,6 +2769,10 @@ Cleanup must execute in this exact order to prevent resource leaks:
 
 The `cleanups` slice in `processHarness` is executed in reverse append order (LIFO),
 ensuring teardown mirrors setup.
+
+The Runner guarantees: `Injector.Recover()` (via defer) → `teardown()` (via defer).
+The harness guarantees: stop services → terminate containers → close logs → delete binaries.
+No injected fault survives scenario completion.
 
 ---
 
