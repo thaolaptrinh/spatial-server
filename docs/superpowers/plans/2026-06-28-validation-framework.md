@@ -4,7 +4,7 @@
 
 **Goal:** Implement a generic Validation Framework as the single execution engine for all validation activities (chaos, integration, benchmark, load, soak).
 
-**Architecture:** 4 core files (scenario, measure, report, runner) with no build tag, plus 14 leaf files (harness, injectors, validators, observers, recovery, probes, reporters, scenarios, test entry) with `//go:build validation`. Runner orchestrates: Setup → CheckRequirements → Baseline Observe → Inject → Wait → Post-Recovery Observe → Validate → Report → Teardown.
+**Architecture:** 4 core files (scenario, measure, report, runner) with no build tag, plus 14 leaf files (harness, injectors, validators, observers, recovery, probes, reporters, scenarios, test entry) with `//go:build validation`. Runner orchestrates: Setup → CheckRequirements → Baseline Observe → Inject → defer Recover() → Wait → Post-Recovery Observe → Validate → Report → Teardown. Recover() is guaranteed via defer.
 
 **Tech Stack:** Go 1.25, Testcontainers (PG 16, Redis 7), gRPC, stretchr/testify
 
@@ -13,17 +13,17 @@
 ## Dependency Graph
 
 ```
-Phase 1 ─── Phase 2 ─── Phase 3 ─── Phase 9 ─── Phase 10 ─── Phase 11 ─── Phase 12 ─── Phase 13 ─── Phase 14
+Phase 1 ─── Phase 2 ─── Phase 3 ─── Phase 9 ─── Phase 10 ─── Phase 11A ─── Phase 12 ─── Phase 11B ─── Phase 13 ─── Phase 14
                   │
      ┌────────────┼────────────┬────────────┐
      │            │            │            │
 Phase 4       Phase 5       Phase 6       Phase 7           Phase 8
-(recovery)   (probes)      (harness)    (validators)    (process inj)
+(recovery)   (probes)      (harness*4)  (validators)    (process inj)
      │            │            │            │                 │
      └────────────┴────────────┴────────────┴─────────────────┘
 ```
 
-**Critical path:** 1 → 2 → 3 → 9 → 10 → 11 → 12 → 13 → 14
+**Critical path:** 1 → 2 → 3 → 9 → 10 → 11A → 12 → 11B → 13 → 14
 **Parallel:** 4, 5, 6, 7, 8 (depend only on Phase 1)
 
 ---
@@ -105,8 +105,10 @@ type Requirements struct {
 }
 
 type ScenarioMetadata struct {
+	ID               string
 	Name             string
 	Description      string
+	Version          int
 	Tags             []string
 	Severity         Severity
 	Mode             ExecutionMode
@@ -117,14 +119,23 @@ type ScenarioMetadata struct {
 
 type SetupFunc func() (Infrastructure, func(), error)
 
+type AcceptanceCriteria struct {
+	RecoveryDuration     time.Duration
+	OwnershipConvergence time.Duration
+	TickP95              time.Duration
+	ReconnectTime        time.Duration
+	QueueDrainTime       time.Duration
+}
+
 type ScenarioDefinition struct {
-	Metadata   ScenarioMetadata
-	Setup      SetupFunc
-	Injector   Injector
-	Observers  []Observer
-	Validators []Validator
-	Recovery   RecoveryWaiter
-	Reporter   Reporter
+	Metadata    ScenarioMetadata
+	Setup       SetupFunc
+	Injector    Injector
+	Observers   []Observer
+	Validators  []Validator
+	Recovery    RecoveryWaiter
+	Reporter    Reporter
+	Acceptance  AcceptanceCriteria
 }
 
 func CheckRequirements(infra Infrastructure, req Requirements) (met bool, reason string) {
@@ -149,6 +160,19 @@ func CheckRequirements(infra Infrastructure, req Requirements) (met bool, reason
 	}
 	return true, ""
 }
+
+// ── Evidence keys (single source of truth) ──────────────────────────────
+
+const (
+	EvKeyEntityCount       = "entity-count"
+	EvKeyGhostCount        = "ghost-count"
+	EvKeyCmdDrops          = "cmd-drops"
+	EvKeyZoneOwnerCount    = "zone-owner-count"
+	EvKeyDisconnectedCount = "disconnected-count"
+	EvKeyRuntimeNodes      = "runtime-nodes"
+	EvKeyRoomServiceAddr   = "room-service-endpoint"
+	EvKeyGatewayAddr       = "gateway-endpoint"
+)
 
 type Injector interface {
 	Name() string
@@ -649,6 +673,7 @@ func (r *ScenarioRunner) Run(ctx context.Context, sc ScenarioDefinition) *Valida
 		report.RootCause = fmt.Sprintf("inject: %v", err)
 		return report
 	}
+	defer func() { _ = sc.Injector.Recover(context.Background(), infra) }()
 
 	recoverStart := time.Now()
 	recoveryErr := sc.Recovery.Wait(scopedCtx, infra)
@@ -895,8 +920,8 @@ func (o *State) Observe(ctx context.Context, phase validation.ObservationPhase, 
 		return nil, fmt.Errorf("state observer: %w", err)
 	}
 	return []validation.Evidence{
-		{Timestamp: now, Phase: phase, Source: "state", Kind: "state", Key: "room-service-endpoint", Value: addr},
-		{Timestamp: now, Phase: phase, Source: "state", Kind: "state", Key: "runtime-nodes", Value: strconv.Itoa(infra.RuntimeNodes())},
+		{Timestamp: now, Phase: phase, Source: "state", Kind: "state", Key: validation.EvKeyRoomServiceAddr, Value: addr},
+		{Timestamp: now, Phase: phase, Source: "state", Kind: "state", Key: validation.EvKeyRuntimeNodes, Value: strconv.Itoa(infra.RuntimeNodes())},
 	}, nil
 }
 ```
@@ -931,7 +956,7 @@ func (o *Routing) Observe(ctx context.Context, phase validation.ObservationPhase
 		return nil, fmt.Errorf("routing observer: %w", err)
 	}
 	return []validation.Evidence{
-		{Timestamp: now, Phase: phase, Source: "routing", Kind: "state", Key: "gateway-endpoint", Value: addr},
+		{Timestamp: now, Phase: phase, Source: "routing", Kind: "state", Key: validation.EvKeyGatewayAddr, Value: addr},
 	}, nil
 }
 ```
@@ -1288,14 +1313,38 @@ git commit -m "feat(game): add build-tag-gated Snapshot() diagnostic probe"
 
 ## Phase 6: Infrastructure Harness
 
-**New files:** `internal/validation/harness/harness.go`
+**New files:**
+- `internal/validation/harness/stack.go` — Testcontainers PG+Redis, processHarness struct, Infrastructure impl
+- `internal/validation/harness/process_manager.go` — service lifecycle (start/stop)
+- `internal/validation/harness/builders.go` — buildService, moduleRoot
+- `internal/validation/harness/health.go` — waitForGRPC, waitForHTTP
+
 **Deps:** Phase 1. **Build tag:** `//go:build validation`.
+
+**Note:** Split from original 1-file harness into 4 for maintainability. No behavioural changes.
+The full consolidated code follows — split into 4 files during implementation.
 
 ---
 
-### Task 6.1: harness.go
+### Task 6.1: stack.go
 
-- [ ] **Create `internal/validation/harness/harness.go`**:
+- [ ] **Create `internal/validation/harness/stack.go`** — `processHarness`, `StartStack()`, `StartStackForChaos()`, Infrastructure methods.
+
+### Task 6.2: process_manager.go
+
+- [ ] **Create `internal/validation/harness/process_manager.go`** — `StartRoomService`, `StartGameServer`, `StartGateway`, `cleanEnv`, `killProcess`.
+
+### Task 6.3: builders.go
+
+- [ ] **Create `internal/validation/harness/builders.go`** — `buildService`, `moduleRoot`.
+
+### Task 6.4: health.go
+
+- [ ] **Create `internal/validation/harness/health.go`** — `waitForGRPC`, `waitForHTTP`.
+
+---
+
+### Consolidated harness code (split into 4 files during implementation):
 
 ```go
 //go:build validation
@@ -1630,8 +1679,8 @@ type Entity struct{}
 func (v *Entity) Name() string { return "entity" }
 
 func (v *Entity) Validate(baseline, postRecovery []validation.Evidence) validation.ValidationResult {
-	pre := findInt(baseline, "entity-count")
-	post := findInt(postRecovery, "entity-count")
+	pre := findInt(baseline, validation.EvKeyEntityCount)
+	post := findInt(postRecovery, validation.EvKeyEntityCount)
 	if pre == -1 || post == -1 {
 		return validation.ValidationResult{Validator: v.Name(), Status: validation.StatusSkip, Detail: "entity-count evidence missing"}
 	}
@@ -1669,8 +1718,8 @@ type Ownership struct{}
 func (v *Ownership) Name() string { return "ownership" }
 
 func (v *Ownership) Validate(baseline, postRecovery []validation.Evidence) validation.ValidationResult {
-	pre := findInt(baseline, "zone-owner-count")
-	post := findInt(postRecovery, "zone-owner-count")
+	pre := findInt(baseline, validation.EvKeyZoneOwnerCount)
+	post := findInt(postRecovery, validation.EvKeyZoneOwnerCount)
 	if pre == -1 || post == -1 {
 		return validation.ValidationResult{Validator: v.Name(), Status: validation.StatusSkip, Detail: "zone-owner-count evidence missing"}
 	}
@@ -1698,8 +1747,8 @@ type AOI struct{}
 func (v *AOI) Name() string { return "aoi" }
 
 func (v *AOI) Validate(baseline, postRecovery []validation.Evidence) validation.ValidationResult {
-	postGhosts := findInt(postRecovery, "ghost-count")
-	postEntities := findInt(postRecovery, "entity-count")
+	postGhosts := findInt(postRecovery, validation.EvKeyGhostCount)
+	postEntities := findInt(postRecovery, validation.EvKeyEntityCount)
 	if postGhosts == -1 || postEntities == -1 {
 		return validation.ValidationResult{Validator: v.Name(), Status: validation.StatusSkip, Detail: "ghost-count or entity-count missing"}
 	}
@@ -1726,8 +1775,8 @@ type Session struct{}
 func (v *Session) Name() string { return "session" }
 
 func (v *Session) Validate(baseline, postRecovery []validation.Evidence) validation.ValidationResult {
-	preDisc := findInt(baseline, "disconnected-count")
-	postDisc := findInt(postRecovery, "disconnected-count")
+	preDisc := findInt(baseline, validation.EvKeyDisconnectedCount)
+	postDisc := findInt(postRecovery, validation.EvKeyDisconnectedCount)
 	if preDisc == -1 || postDisc == -1 {
 		return validation.ValidationResult{Validator: v.Name(), Status: validation.StatusSkip, Detail: "disconnected-count evidence missing"}
 	}
@@ -1752,8 +1801,8 @@ type Scheduler struct{}
 func (v *Scheduler) Name() string { return "scheduler" }
 
 func (v *Scheduler) Validate(baseline, postRecovery []validation.Evidence) validation.ValidationResult {
-	preDrops := findInt(baseline, "cmd-drops")
-	postDrops := findInt(postRecovery, "cmd-drops")
+	preDrops := findInt(baseline, validation.EvKeyCmdDrops)
+	postDrops := findInt(postRecovery, validation.EvKeyCmdDrops)
 	if preDrops == -1 || postDrops == -1 {
 		return validation.ValidationResult{Validator: v.Name(), Status: validation.StatusSkip, Detail: "cmd-drops evidence missing"}
 	}
@@ -1780,8 +1829,8 @@ import (
 
 func TestEntity_Pass(t *testing.T) {
 	v := &Entity{}
-	base := []validation.Evidence{{Key: "entity-count", Value: "10", Timestamp: time.Now()}}
-	post := []validation.Evidence{{Key: "entity-count", Value: "10", Timestamp: time.Now()}}
+	base := []validation.Evidence{{Key: validation.EvKeyEntityCount, Value: "10", Timestamp: time.Now()}}
+	post := []validation.Evidence{{Key: validation.EvKeyEntityCount, Value: "10", Timestamp: time.Now()}}
 	r := v.Validate(base, post)
 	if r.Status != validation.StatusPass {
 		t.Fatalf("expected pass, got %s: %s", r.Status, r.Detail)
@@ -1791,8 +1840,8 @@ func TestEntity_Pass(t *testing.T) {
 func TestEntity_Fail(t *testing.T) {
 	v := &Entity{}
 	r := v.Validate(
-		[]validation.Evidence{{Key: "entity-count", Value: "10"}},
-		[]validation.Evidence{{Key: "entity-count", Value: "5"}},
+		[]validation.Evidence{{Key: validation.EvKeyEntityCount, Value: "10"}},
+		[]validation.Evidence{{Key: validation.EvKeyEntityCount, Value: "5"}},
 	)
 	if r.Status != validation.StatusFail {
 		t.Fatalf("expected fail, got %s", r.Status)
@@ -1802,8 +1851,8 @@ func TestEntity_Fail(t *testing.T) {
 func TestAOI_GhostLeak(t *testing.T) {
 	v := &AOI{}
 	r := v.Validate(
-		[]validation.Evidence{{Key: "ghost-count", Value: "2"}, {Key: "entity-count", Value: "10"}},
-		[]validation.Evidence{{Key: "ghost-count", Value: "15"}, {Key: "entity-count", Value: "10"}},
+		[]validation.Evidence{{Key: validation.EvKeyGhostCount, Value: "2"}, {Key: validation.EvKeyEntityCount, Value: "10"}},
+		[]validation.Evidence{{Key: validation.EvKeyGhostCount, Value: "15"}, {Key: validation.EvKeyEntityCount, Value: "10"}},
 	)
 	if r.Status != validation.StatusFail {
 		t.Fatalf("expected ghost leak fail, got %s", r.Status)
@@ -1813,8 +1862,8 @@ func TestAOI_GhostLeak(t *testing.T) {
 func TestAOI_GhostBounded(t *testing.T) {
 	v := &AOI{}
 	r := v.Validate(
-		[]validation.Evidence{{Key: "ghost-count", Value: "5"}, {Key: "entity-count", Value: "10"}},
-		[]validation.Evidence{{Key: "ghost-count", Value: "7"}, {Key: "entity-count", Value: "10"}},
+		[]validation.Evidence{{Key: validation.EvKeyGhostCount, Value: "5"}, {Key: validation.EvKeyEntityCount, Value: "10"}},
+		[]validation.Evidence{{Key: validation.EvKeyGhostCount, Value: "7"}, {Key: validation.EvKeyEntityCount, Value: "10"}},
 	)
 	if r.Status != validation.StatusPass {
 		t.Fatalf("expected pass, got %s: %s", r.Status, r.Detail)
@@ -1824,8 +1873,8 @@ func TestAOI_GhostBounded(t *testing.T) {
 func TestOwnership_Pass(t *testing.T) {
 	v := &Ownership{}
 	r := v.Validate(
-		[]validation.Evidence{{Key: "zone-owner-count", Value: "2"}},
-		[]validation.Evidence{{Key: "zone-owner-count", Value: "2"}},
+		[]validation.Evidence{{Key: validation.EvKeyZoneOwnerCount, Value: "2"}},
+		[]validation.Evidence{{Key: validation.EvKeyZoneOwnerCount, Value: "2"}},
 	)
 	if r.Status != validation.StatusPass {
 		t.Fatalf("expected pass, got %s", r.Status)
@@ -2072,16 +2121,18 @@ git commit -m "feat(validation): add compose-only injectors (network, infrastruc
 
 ---
 
-## Phase 11: Scenario Definitions + Test Entry
+## Phase 11A: Process Scenarios + Test Entry
 
-**New files:** `tests/validation/scenarios.go`, `tests/validation/chaos_test.go`
+**New files:** `tests/validation/process_scenarios.go`, `tests/validation/process_test.go`
 **Deps:** Phases 1-10. **Build tag:** `//go:build validation`.
+
+**Definition of Done:** `go build -tags=validation ./tests/validation/` succeeds; 7 process scenarios run and pass.
 
 ---
 
-### Task 11.1: scenarios.go
+### Task 11A.1: process_scenarios.go
 
-- [ ] **Create `tests/validation/scenarios.go`**:
+- [ ] **Create `tests/validation/process_scenarios.go`** — 7 process-mode scenarios:
 
 ```go
 //go:build validation
@@ -2099,7 +2150,7 @@ import (
 	"spatial-server/internal/validation/validators"
 )
 
-func ChaosScenarios(t *testing.T) []validation.ScenarioDefinition {
+func ProcessScenarios(t *testing.T) []validation.ScenarioDefinition {
 	t.Helper()
 	stack := func(runtimes int) func() (validation.Infrastructure, func(), error) {
 		return func() (validation.Infrastructure, func(), error) {
@@ -2120,7 +2171,8 @@ func ChaosScenarios(t *testing.T) []validation.ScenarioDefinition {
 	return []validation.ScenarioDefinition{
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "runtime-crash", Description: "Runtime Node crash and recovery",
+				ID: "runtime-crash", Name: "Runtime Node Crash",
+				Description: "Runtime Node crash and recovery", Version: 1,
 				Tags: []string{"chaos", "crash"}, Severity: validation.SeverityHigh,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
@@ -2132,10 +2184,12 @@ func ChaosScenarios(t *testing.T) []validation.ScenarioDefinition {
 			Recovery:   crashRecovery,
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "runtime-restart", Description: "Runtime Node SIGKILL + restart",
+				ID: "runtime-restart", Name: "Runtime Node Restart",
+				Description: "Runtime Node SIGKILL + restart", Version: 1,
 				Tags: []string{"chaos", "restart"}, Severity: validation.SeverityHigh,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
@@ -2147,169 +2201,116 @@ func ChaosScenarios(t *testing.T) []validation.ScenarioDefinition {
 			Recovery:   crashRecovery,
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "gateway-crash", Description: "Gateway crash and recovery",
+				ID: "gateway-crash", Name: "Gateway Crash",
+				Description: "Gateway crash and recovery", Version: 1,
 				Tags: []string{"chaos", "crash", "gateway"}, Severity: validation.SeverityHigh,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
 				Timeout:          2 * time.Minute,
 				ExpectedBehavior: "Gateway reconnects to Room Service, routing cache repopulated",
 			},
-			Setup:      stack(1),
-			Injector:   &injectors.ProcessCrash{Target: validation.ResourceGateway},
+			Setup:    stack(1),
+			Injector: &injectors.ProcessCrash{Target: validation.ResourceGateway},
 			Recovery: recovery.NewComposite(recovery.ModeAll,
 				recovery.HealthyEndpoint(validation.ResourceGateway),
 				recovery.FixedDelay("stabilize", 3*time.Second),
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 15 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "gateway-restart", Description: "Gateway restart",
+				ID: "gateway-restart", Name: "Gateway Restart",
+				Description: "Gateway restart", Version: 1,
 				Tags: []string{"chaos", "restart", "gateway"}, Severity: validation.SeverityHigh,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
 				Timeout:          2 * time.Minute,
 				ExpectedBehavior: "Gateway restarts, reconnects, routing valid",
 			},
-			Setup:      stack(1),
-			Injector:   &injectors.ProcessCrash{Target: validation.ResourceGateway},
+			Setup:    stack(1),
+			Injector: &injectors.ProcessCrash{Target: validation.ResourceGateway},
 			Recovery: recovery.NewComposite(recovery.ModeAll,
 				recovery.HealthyEndpoint(validation.ResourceGateway),
 				recovery.FixedDelay("stabilize", 3*time.Second),
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 15 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "room-service-crash", Description: "Room Service crash and recovery",
+				ID: "room-service-crash", Name: "Room Service Crash",
+				Description: "Room Service crash and recovery", Version: 1,
 				Tags: []string{"chaos", "crash"}, Severity: validation.SeverityCritical,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
 				Timeout:          2 * time.Minute,
 				ExpectedBehavior: "Room Service recovers, ownership table preserved, Game Servers reconnect",
 			},
-			Setup:      stack(1),
-			Injector:   &injectors.ProcessCrash{Target: validation.ResourceRoomService},
+			Setup:    stack(1),
+			Injector: &injectors.ProcessCrash{Target: validation.ResourceRoomService},
 			Recovery: recovery.NewComposite(recovery.ModeAll,
 				recovery.HealthyEndpoint(validation.ResourceRoomService),
 				recovery.FixedDelay("stabilize", 5*time.Second),
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "room-service-restart", Description: "Room Service restart",
+				ID: "room-service-restart", Name: "Room Service Restart",
+				Description: "Room Service restart", Version: 1,
 				Tags: []string{"chaos", "restart"}, Severity: validation.SeverityCritical,
 				Mode: validation.ModeProcess,
 				Requirements:     validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
 				Timeout:          2 * time.Minute,
 				ExpectedBehavior: "Room Service restarts, ownership preserved, routing restored",
 			},
-			Setup:      stack(1),
-			Injector:   &injectors.ProcessCrash{Target: validation.ResourceRoomService},
+			Setup:    stack(1),
+			Injector: &injectors.ProcessCrash{Target: validation.ResourceRoomService},
 			Recovery: recovery.NewComposite(recovery.ModeAll,
 				recovery.HealthyEndpoint(validation.ResourceRoomService),
 				recovery.FixedDelay("stabilize", 5*time.Second),
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 30 * time.Second},
 		},
 		{
 			Metadata: validation.ScenarioMetadata{
-				Name: "delayed-heartbeats", Description: "Runtime Node frozen and thawed",
+				ID: "delayed-heartbeats", Name: "Delayed Heartbeats",
+				Description: "Runtime Node frozen and thawed", Version: 1,
 				Tags: []string{"chaos", "heartbeat"}, Severity: validation.SeverityMedium,
-				Mode: validation.ModeProcess, Requirements: validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
-				Timeout:  2 * time.Minute,
+				Mode:         validation.ModeProcess,
+				Requirements: validation.Requirements{PostgreSQL: true, Redis: true, MinRuntimeNodes: 1},
+				Timeout:      2 * time.Minute,
 				ExpectedBehavior: "Room Service detects missing heartbeats, marks zones orphan, recovers on thaw",
 			},
-			Setup:      stack(1),
-			Injector:   injectors.NewProcessFreeze(validation.ResourceRuntime, 15*time.Second),
+			Setup:    stack(1),
+			Injector: injectors.NewProcessFreeze(validation.ResourceRuntime, 15*time.Second),
 			Recovery: recovery.NewComposite(recovery.ModeAll,
 				recovery.FixedDelay("thaw-window", 20*time.Second),
 			),
 			Observers:  defaultObs,
 			Validators: defaultVals,
+			Acceptance: validation.AcceptanceCriteria{RecoveryDuration: 25 * time.Second},
 		},
-		// ── Compose-mode scenarios (skip in process mode) ──────────
-		{Metadata: validation.ScenarioMetadata{
-			Name: "postgres-restart", Description: "PostgreSQL restart",
-			Tags: []string{"chaos", "infra"}, Severity: validation.SeverityCritical,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{PostgreSQL: true, ComposeRequired: true},
-			Timeout:          2 * time.Minute,
-			ExpectedBehavior: "Services reconnect to PG after restart, no data loss",
-		}, Injector: &injectors.InfraRestart{Target: validation.ResourcePostgres}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "redis-restart", Description: "Redis restart",
-			Tags: []string{"chaos", "infra"}, Severity: validation.SeverityHigh,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{Redis: true, ComposeRequired: true},
-			Timeout:          2 * time.Minute,
-			ExpectedBehavior: "Services reconnect to Redis, graceful degradation during outage",
-		}, Injector: &injectors.InfraRestart{Target: validation.ResourceRedis}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "network-latency", Description: "Injected latency on inter-service RPCs",
-			Tags: []string{"chaos", "network"}, Severity: validation.SeverityMedium,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, NetworkFaults: true},
-			Timeout:          2 * time.Minute,
-			ExpectedBehavior: "RPCs tolerate added latency, no cascading failures",
-		}, Injector: &injectors.NetLatency{DelayMS: 100, JitterMS: 20}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "packet-loss", Description: "Injected packet loss on inter-service connections",
-			Tags: []string{"chaos", "network"}, Severity: validation.SeverityMedium,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, NetworkFaults: true},
-			Timeout:          2 * time.Minute,
-			ExpectedBehavior: "System handles retransmissions, no data corruption",
-		}, Injector: &injectors.NetLoss{Percent: 10}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "network-partition", Description: "Temporary network isolation of a Runtime Node",
-			Tags: []string{"chaos", "network", "partition"}, Severity: validation.SeverityCritical,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, NetworkFaults: true, MinRuntimeNodes: 2},
-			Timeout:          3 * time.Minute,
-			ExpectedBehavior: "Partitioned node detected as dead, zones reassigned, no split-brain",
-		}, Injector: &injectors.NetPartition{}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "slow-runtime", Description: "CPU-throttled Runtime Node",
-			Tags: []string{"chaos", "resource"}, Severity: validation.SeverityMedium,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
-			Timeout:          3 * time.Minute,
-			ExpectedBehavior: "Tick loop degrades gracefully, no crashes under CPU pressure",
-		}, Injector: &injectors.ResourceCPU{Cores: 1}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "cpu-starvation", Description: "Severe CPU starvation of Runtime Node",
-			Tags: []string{"chaos", "resource"}, Severity: validation.SeverityHigh,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
-			Timeout:          3 * time.Minute,
-			ExpectedBehavior: "Tick overruns detected, system stabilizes when CPU restored",
-		}, Injector: &injectors.ResourceCPU{Cores: 0}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
-		{Metadata: validation.ScenarioMetadata{
-			Name: "memory-pressure", Description: "Memory-limited Runtime Node",
-			Tags: []string{"chaos", "resource"}, Severity: validation.SeverityMedium,
-			Mode: validation.ModeCompose,
-			Requirements:     validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
-			Timeout:          3 * time.Minute,
-			ExpectedBehavior: "GC pressure increases but no OOM, entities preserved",
-		}, Injector: &injectors.ResourceMemory{LimitMB: 64}, Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals},
 	}
 }
 ```
 
 ---
 
-### Task 11.2: chaos_test.go
+### Task 11A.2: process_test.go
 
-- [ ] **Create `tests/validation/chaos_test.go`**:
+- [ ] **Create `tests/validation/process_test.go`**:
 
 ```go
 //go:build validation
@@ -2323,13 +2324,9 @@ import (
 	v "spatial-server/internal/validation"
 )
 
-func TestChaos(t *testing.T) {
-	scenarios := ChaosScenarios(t)
-	for _, sc := range scenarios {
-		t.Run(sc.Metadata.Name, func(t *testing.T) {
-			if sc.Metadata.Mode == v.ModeCompose {
-				t.Skip("compose scenario — requires Docker Compose")
-			}
+func TestProcessChaosScenarios(t *testing.T) {
+	for _, sc := range ProcessScenarios(t) {
+		t.Run(sc.Metadata.ID, func(t *testing.T) {
 			report := v.NewRunner().Run(context.Background(), sc)
 			if report.Outcome == v.OutcomeSkipped {
 				t.Skipf("skipped: %s", report.RootCause)
@@ -2337,6 +2334,9 @@ func TestChaos(t *testing.T) {
 			if report.Outcome != v.OutcomePassed {
 				t.Errorf("scenario %s: %s — %s", sc.Metadata.Name, report.Outcome, report.RootCause)
 				t.Log(v.MarkdownReportString(report))
+			}
+			if sc.Acceptance.RecoveryDuration > 0 && report.Measurement.Recovery.Duration > sc.Acceptance.RecoveryDuration {
+				t.Logf("WARNING: recovery %v exceeds acceptance %v", report.Measurement.Recovery.Duration, sc.Acceptance.RecoveryDuration)
 			}
 		})
 	}
@@ -2348,11 +2348,205 @@ Expected: SUCCESS
 
 ---
 
-### Task 11.3: Commit
+### Task 11A.3: Commit
 
 ```bash
 git add tests/validation/
-git commit -m "feat(validation): add 15 chaos scenario definitions and test entry point"
+git commit -m "feat(validation): add 7 process chaos scenarios and test entry"
+```
+
+---
+
+## Phase 11B: Compose Scenarios
+
+**New files:** `tests/validation/compose_scenarios.go`, `tests/validation/compose_test.go`
+**Deps:** Phase 11A. **Build tag:** `//go:build validation`.
+
+**Definition of Done:** `go build -tags=validation ./tests/validation/` succeeds.
+
+---
+
+### Task 11B.1: compose_scenarios.go
+
+- [ ] **Create `tests/validation/compose_scenarios.go`** — 8 compose-mode scenarios:
+
+```go
+//go:build validation
+
+package validation
+
+import (
+	"time"
+
+	"spatial-server/internal/validation"
+	"spatial-server/internal/validation/injectors"
+	"spatial-server/internal/validation/observers"
+	"spatial-server/internal/validation/recovery"
+	"spatial-server/internal/validation/validators"
+)
+
+func ComposeScenarios() []validation.ScenarioDefinition {
+	defaultVals := []validation.Validator{
+		&validators.Entity{}, &validators.Ownership{},
+		&validators.AOI{}, &validators.Session{},
+	}
+	defaultObs := []validation.Observer{&observers.State{}, &observers.Routing{}}
+	crashRecovery := recovery.NewComposite(recovery.ModeAll,
+		recovery.HealthyEndpoint(validation.ResourceRoomService),
+		recovery.FixedDelay("stabilize", 5*time.Second),
+	)
+
+	return []validation.ScenarioDefinition{
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "postgres-restart", Name: "PostgreSQL Restart",
+				Description: "PostgreSQL restart", Version: 1,
+				Tags: []string{"chaos", "infra"}, Severity: validation.SeverityCritical,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{PostgreSQL: true, ComposeRequired: true},
+				Timeout:      2 * time.Minute,
+				ExpectedBehavior: "Services reconnect to PG after restart, no data loss",
+			},
+			Injector:   &injectors.InfraRestart{Target: validation.ResourcePostgres},
+			Recovery:   crashRecovery,
+			Observers:  defaultObs,
+			Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "redis-restart", Name: "Redis Restart",
+				Description: "Redis restart", Version: 1,
+				Tags: []string{"chaos", "infra"}, Severity: validation.SeverityHigh,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{Redis: true, ComposeRequired: true},
+				Timeout:      2 * time.Minute,
+				ExpectedBehavior: "Services reconnect to Redis, graceful degradation during outage",
+			},
+			Injector:   &injectors.InfraRestart{Target: validation.ResourceRedis},
+			Recovery:   crashRecovery,
+			Observers:  defaultObs,
+			Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "network-latency", Name: "Network Latency",
+				Description: "Injected latency on inter-service RPCs", Version: 1,
+				Tags: []string{"chaos", "network"}, Severity: validation.SeverityMedium,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, NetworkFaults: true},
+				Timeout:      2 * time.Minute,
+				ExpectedBehavior: "RPCs tolerate added latency, no cascading failures",
+			},
+			Injector: &injectors.NetLatency{DelayMS: 100, JitterMS: 20},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "packet-loss", Name: "Packet Loss",
+				Description: "Injected packet loss on inter-service connections", Version: 1,
+				Tags: []string{"chaos", "network"}, Severity: validation.SeverityMedium,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, NetworkFaults: true},
+				Timeout:      2 * time.Minute,
+				ExpectedBehavior: "System handles retransmissions, no data corruption",
+			},
+			Injector: &injectors.NetLoss{Percent: 10},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "network-partition", Name: "Network Partition",
+				Description: "Temporary network isolation of a Runtime Node", Version: 1,
+				Tags: []string{"chaos", "network", "partition"}, Severity: validation.SeverityCritical,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, NetworkFaults: true, MinRuntimeNodes: 2},
+				Timeout:      3 * time.Minute,
+				ExpectedBehavior: "Partitioned node detected as dead, zones reassigned, no split-brain",
+			},
+			Injector: &injectors.NetPartition{},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "slow-runtime", Name: "Slow Runtime Node",
+				Description: "CPU-throttled Runtime Node", Version: 1,
+				Tags: []string{"chaos", "resource"}, Severity: validation.SeverityMedium,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
+				Timeout:      3 * time.Minute,
+				ExpectedBehavior: "Tick loop degrades gracefully, no crashes under CPU pressure",
+			},
+			Injector: &injectors.ResourceCPU{Cores: 1},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "cpu-starvation", Name: "CPU Starvation",
+				Description: "Severe CPU starvation of Runtime Node", Version: 1,
+				Tags: []string{"chaos", "resource"}, Severity: validation.SeverityHigh,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
+				Timeout:      3 * time.Minute,
+				ExpectedBehavior: "Tick overruns detected, system stabilizes when CPU restored",
+			},
+			Injector: &injectors.ResourceCPU{Cores: 0},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+		{
+			Metadata: validation.ScenarioMetadata{
+				ID: "memory-pressure", Name: "Memory Pressure",
+				Description: "Memory-limited Runtime Node", Version: 1,
+				Tags: []string{"chaos", "resource"}, Severity: validation.SeverityMedium,
+				Mode:         validation.ModeCompose,
+				Requirements: validation.Requirements{ComposeRequired: true, MinRuntimeNodes: 1},
+				Timeout:      3 * time.Minute,
+				ExpectedBehavior: "GC pressure increases but no OOM, entities preserved",
+			},
+			Injector: &injectors.ResourceMemory{LimitMB: 64},
+			Recovery: crashRecovery, Observers: defaultObs, Validators: defaultVals,
+		},
+	}
+}
+```
+
+---
+
+### Task 11B.2: compose_test.go
+
+- [ ] **Create `tests/validation/compose_test.go`**:
+
+```go
+//go:build validation
+
+package validation
+
+import (
+	"context"
+	"testing"
+
+	v "spatial-server/internal/validation"
+)
+
+func TestComposeChaosScenarios(t *testing.T) {
+	for _, sc := range ComposeScenarios() {
+		t.Run(sc.Metadata.ID, func(t *testing.T) {
+			t.Skip("compose scenarios require Docker Compose orchestration")
+			_ = sc
+		})
+	}
+}
+```
+
+- [ ] **Run:** `go build -tags=validation ./tests/validation/`
+Expected: SUCCESS
+
+---
+
+### Task 11B.3: Commit
+
+```bash
+git add tests/validation/compose_scenarios.go tests/validation/compose_test.go
+git commit -m "feat(validation): add 8 compose chaos scenario definitions"
 ```
 
 ---
@@ -2361,11 +2555,14 @@ git commit -m "feat(validation): add 15 chaos scenario definitions and test entr
 
 **New files:** None.
 
-- [ ] Run all 6 process-mode scenarios with real services:
+- [ ] Run all 7 process-mode scenarios with real services:
 ```bash
-go test -tags=validation -run TestChaos -count=1 -timeout=30m ./tests/validation/ 2>&1 | tee chaos-report.txt
+go test -tags=validation -run TestProcessChaosScenarios -count=1 -timeout=30m ./tests/validation/ 2>&1 | tee artifacts/reports/process-chaos-report.txt
 ```
-Expected: 6 process scenarios run (crash/restart for runtime, gateway, room-service). Compose scenarios skipped.
+Expected: 7 process scenarios run (crash/restart for runtime, gateway, room-service, delayed heartbeats).
+
+- [ ] Verify acceptance criteria: each scenario's `Acceptance.RecoveryDuration` is checked and logged.
+- [ ] Artifacts generated in `artifacts/reports/`.
 
 ---
 
@@ -2376,10 +2573,10 @@ Expected: 6 process scenarios run (crash/restart for runtime, gateway, room-serv
 - [ ] Start Docker Compose stack with 2 runtimes. Run compose scenarios:
 ```bash
 docker compose -f deploy/docker-compose/docker-compose.2node.yml up -d
-go test -tags=validation -run TestChaos -count=1 -timeout=30m ./tests/validation/
+go test -tags=validation -run TestComposeChaosScenarios -count=1 -timeout=30m ./tests/validation/
 docker compose -f deploy/docker-compose/docker-compose.2node.yml down
 ```
-Expected: 9 compose scenarios run against live stack.
+Expected: 8 compose scenarios run against live stack.
 
 ---
 
@@ -2401,8 +2598,22 @@ Expected: 9 compose scenarios run against live stack.
 | 3 (Observers) | gRPC imports pull heavy deps | `//go:build validation` gate |
 | 4 (Recovery) | Race conditions in polling | Tests validate timeout/all-of/any-of behavior |
 | 6 (Harness) | Testcontainers Docker dependency | Only via build tag; skipped in light builds |
-| 11-13 (Scenarios) | Real services may have bugs | These ARE the tests that find those bugs |
+| 11A-12 (Process) | Real services may have bugs | These ARE the tests that find those bugs |
+| 11B-13 (Compose) | Docker Compose required | Scenarios explicitly skipped when unavailable; documented as future milestone |
 | All | Circular imports | Dependency direction enforced: runtime → never imports validation |
+
+---
+
+## Compose Injector Status
+
+Compose-mode injectors (`network.go`, `infrastructure.go`, `resource.go`) are **intentional placeholders** during this milestone. Each returns `fmt.Errorf("requires Docker Compose execution mode")` on `Inject()`.
+
+**Roadmap note** — these will be replaced by real Docker SDK implementations in a future milestone:
+- `NetLatency`/`NetLoss`/`NetPartition` → Docker SDK container exec + `tc netem` / `iptables`
+- `InfraRestart` → Docker SDK `ContainerRestart`
+- `ResourceCPU`/`ResourceMemory` → Docker SDK `ContainerUpdate` with cgroup limits
+
+No current scenario relies on these injectors succeeding. All compose scenarios are `ModeCompose` and explicitly skipped when Compose is unavailable.
 
 ---
 
@@ -2415,12 +2626,34 @@ Expected: 9 compose scenarios run against live stack.
 | 3 | Observer construction | Build verification |
 | 4 | CompositeWaiter (all-of, any-of, timeout, empty) | Unit |
 | 5 | Snapshot initial state | Unit |
-| 6 | Harness construction | Build verification |
+| 6 | Harness 4-file construction + build | Build verification |
 | 7 | Validators (entity fail/pass, AOI leak/bounded, ownership) | Unit |
 | 8 | ProcessFreeze Inject/Recover | Unit + integration |
-| 11 | ChaosScenarios definition | Build verification |
-| 12 | 6 process chaos scenarios | E2E |
-| 13 | 9 compose chaos scenarios | E2E |
+| 11A | ProcessScenarios definition | Build verification |
+| 11B | ComposeScenarios definition | Build verification |
+| 12 | 7 process chaos scenarios | E2E |
+| 13 | 8 compose chaos scenarios | E2E |
+
+---
+
+## Artifact Layout
+
+Every validation run produces a standardized artifact directory:
+
+```
+artifacts/
+  reports/           ← Markdown per-scenario reports + JSON summary
+  logs/              ← service stdout/stderr (from harness log files)
+  metrics/           ← prometheus snapshots (future)
+  pprof/             ← heap/goroutine profiles (future)
+  traces/            ← distributed traces (future)
+```
+
+| Phase | Artifact | Location |
+|-------|----------|----------|
+| 12 | Process chaos reports | `artifacts/reports/process-chaos-report.txt` |
+| 13 | Compose chaos reports | `artifacts/reports/compose-chaos-report.txt` |
+| 14 | Final Chaos Engineering report | `docs/testing/chaos-report.md` |
 
 ---
 
@@ -2442,16 +2675,17 @@ Expected: 9 compose scenarios run against live stack.
 | 3 | Observers | Low | 15m |
 | 4 | Recovery | Low | 20m |
 | 5 | Probes | Low | 10m |
-| 6 | Harness | Medium | 45m |
+| 6 | Harness (4 files) | Medium | 45m |
 | 7 | Validators | Low | 25m |
 | 8 | Process Injectors | Low | 15m |
 | 9 | Reporters | Low | 10m |
 | 10 | Remaining Injectors | Low | 10m |
-| 11 | Scenarios + Test Entry | Medium | 30m |
+| 11A | Process Scenarios + Test Entry | Medium | 30m |
+| 11B | Compose Scenarios | Medium | 15m |
 | 12 | Process E2E | High | 60m |
 | 13 | Compose E2E | Medium | 30m |
 | 14 | Documentation | Low | 15m |
-| **Total** | | | **~5.5h** |
+| **Total** | | | **~5.8h** |
 
 ---
 
