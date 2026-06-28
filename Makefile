@@ -83,27 +83,20 @@ deps:
 	go get -u ./...
 	go mod tidy
 
-# Build Docker images for all services
-BUILD_ARGS=--build-arg VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev) \
-           --build-arg BUILD_TIME=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+# Build Docker images via compose (reads build config from compose.app.yaml)
+VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+BUILD_TIME=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 docker-build:
-	docker build $(BUILD_ARGS) -f build/docker/gateway.Dockerfile -t spatial-gateway .
-	docker build $(BUILD_ARGS) -f build/docker/room-service.Dockerfile -t spatial-room-service .
-	docker build $(BUILD_ARGS) -f build/docker/game-server.Dockerfile -t spatial-game-server .
+	docker compose -f $(COMPOSE)/compose.app.yaml build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME)
 
 # Start demo environment (infra + app) with a test client
 demo:
 	@trap 'docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml down' EXIT; \
 	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml up -d --build --force-recreate; \
-	echo "Waiting for gateway..."; \
-	for i in 1 2 3 4 5 6 7 8 9 10; do \
-		if curl -sf http://localhost:8080/health > /dev/null 2>&1; then \
-			echo "Gateway ready!"; \
-			break; \
-		fi; \
-		echo "  attempt $$i/10..."; \
-		sleep 2; \
-	done; \
+	echo "Waiting for gateway (HEALTHCHECK ensures room-service is ready)..."; \
+	sleep 3; \
 	for i in 1 2 3 4 5; do \
 		echo "Starting client (attempt $$i)"; \
 		if go run ./tools/client/ -addr localhost:8080 -player p1 -runtime r1 -zone z1; then \
