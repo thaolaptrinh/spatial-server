@@ -34,6 +34,7 @@ This directory contains Architecture Decision Records (ADRs) for the Spatial Ser
 | 024 | [Multi-cloud Provider Abstraction](024-multicloud-provider-abstraction.md) | Accepted |
 | 025 | [Platform Terminology Model](025-platform-terminology-model.md) | Implemented |
 | 026 | [Runtime Extension Model](026-runtime-extension-model.md) | Implemented |
+| 027 | [Docker Compose v2 Restructure](027-docker-compose-v2-restructure.md) | Implemented |
 
 ## Reading Order
 

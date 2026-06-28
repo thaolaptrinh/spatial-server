@@ -11,10 +11,10 @@ Describe the deployment procedures for Spatial Server across environments.
 ### Local Development
 
 ```
-Platform: Docker Compose (single host, no K3s)
+Platform: Docker Compose v2 (single host, no K3s)
 Services: gateway, room-service, game-server (1 replica each)
 DB:       PostgreSQL + Redis (Docker containers)
-Run:      docker compose -f deploy/docker-compose/docker-compose.yml up
+Run:      make dev-up-full   # = docker compose -f deploy/docker-compose/compose.yaml -f deploy/docker-compose/compose.app.yaml up -d
 Config:   configs/*.yml + environment variables
 ```
 

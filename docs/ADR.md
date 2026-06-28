@@ -140,13 +140,13 @@ spatial-server/
 │   ├── room_service.proto
 │   ├── game_server.proto
 │   └── common.proto
+├── build/docker/             # Dockerfiles (gateway, room-service, game-server)
 ├── deploy/
-│   ├── docker-compose/       # Docker Compose (local dev only)
-│   │   └── docker-compose.yml
-│   └── docker/               # Dockerfiles
-│       ├── gateway.Dockerfile
-│       ├── room-service.Dockerfile
-│       └── game-server.Dockerfile
+│   └── docker-compose/       # Docker Compose v2 (local dev only)
+│       ├── compose.yaml          # base infra (Postgres + Redis)
+│       ├── compose.app.yaml      # app services (room-service + gateway + game-server)
+│       ├── compose.scaling.yaml  # multi-node (2 named game-server nodes)
+│       └── compose.obs.yaml      # observability overlay (Prometheus + Grafana + Loki)
 ├── infra/                    # Infrastructure as Code
 │   ├── terraform/
 │   │   ├── providers/
@@ -213,7 +213,7 @@ spatial-server/
 Platform: Docker Compose (single host, no K3s)
 Services: gateway, room-service, game-server (1 replica each)
 DB:       PostgreSQL + Redis (Docker containers)
-Run:      docker compose -f deploy/docker-compose/docker-compose.yml up
+Run:      make dev-up-full   # = docker compose -f deploy/docker-compose/compose.yaml -f deploy/docker-compose/compose.app.yaml up
 Config:   configs/*.yml + environment variables
 ```
 
@@ -947,9 +947,9 @@ jobs:
   build:
     run: go build ./apps/...
   docker:
-    run: docker build -f deploy/docker/gateway.Dockerfile -t gateway:$TAG .
+    run: docker build -f build/docker/gateway.Dockerfile -t gateway:$TAG .
   integration-test:
-    run: docker-compose -f deploy/docker-compose/docker-compose.yml up -d && go test ./tests/integration/...
+    run: docker compose -f deploy/docker-compose/compose.yaml -f deploy/docker-compose/compose.app.yaml up -d && go test ./tests/integration/...
 ```
 
 ---

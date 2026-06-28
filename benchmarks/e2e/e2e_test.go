@@ -23,7 +23,7 @@ func defaultAddrs() StackAddrs {
 
 // TestE2E_DistributedBenchmark runs progressive client counts against the live
 // stack and writes benchmarks/reports/e2e-distributed.md. Requires the stack:
-// `docker compose -f deploy/docker-compose/docker-compose.yml up -d`.
+// `make dev-up-full` (compose.yaml + compose.app.yaml).
 // Run with: go test -tags=e2e -run=TestE2E_DistributedBenchmark ./benchmarks/e2e/
 func TestE2E_DistributedBenchmark(t *testing.T) {
 	if testing.Short() {

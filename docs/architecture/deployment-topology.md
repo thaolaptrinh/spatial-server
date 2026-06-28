@@ -57,12 +57,12 @@ graph TB
 | PostgreSQL | Single instance, no replication |
 | Redis | Standalone, no persistence |
 | Room Service HA | Single instance, no leader election |
-| Game Server scaling | `docker compose up --scale game-server=N` |
+| Game Server scaling | `make scale-up` (named nodes) or `--scale game-server=N` (degenerate; see ADR-027) |
 
 ### Startup
 
 ```bash
-docker compose up -d
+make dev-up-full   # docker compose -f deploy/docker-compose/compose.yaml -f deploy/docker-compose/compose.app.yaml up -d
 ```
 
 Services start in dependency order: PostgreSQL → Redis → Room Service → Game Server → Gateway. All services connect to each other via Docker DNS names.

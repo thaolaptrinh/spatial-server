@@ -48,7 +48,7 @@ spatial-server/
 │   └── gen/spatialserver/v1/         # Generated Go code (*.pb.go, *_grpc.pb.go)
 ├── configs/                      # YAML configuration per service
 ├── build/docker/                 # Dockerfiles
-├── deploy/docker-compose/        # Local dev Docker Compose
+├── deploy/docker-compose/        # Local dev Docker Compose (layered compose.*.yaml)
 ├── scripts/                      # dev-up.sh, dev-down.sh
 ├── tests/integration/            # Integration tests (realtime flow)
 ├── tests/chaos/                  # Chaos tests (scripted)

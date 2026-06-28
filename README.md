@@ -113,7 +113,7 @@ Reusable distributed realtime spatial server platform for 3D Showroom, Virtual O
 ```bash
 # Start infrastructure (PostgreSQL, Redis)
 make dev-up
-# (equivalently: docker compose -f deploy/docker-compose/docker-compose.yml up -d)
+# (equivalently: docker compose -f deploy/docker-compose/compose.yaml up -d)
 
 # Run unit tests (most packages need no DB)
 go test ./internal/... ./pkg/... -v -race -cover

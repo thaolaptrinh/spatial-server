@@ -32,8 +32,11 @@ make test-integration      # = go test -tags=integration -count=1 -timeout=120s 
 # Chaos tests (15 scenarios; needs Docker for the process/compose injectors)
 go test -tags=validation -run TestProcessChaosScenarios -count=1 -timeout=30m ./tests/validation/
 
-make dev-up / dev-down     # docker compose Postgres + Redis (deploy/docker-compose/)
+make dev-up                # Postgres + Redis only (compose.yaml) — fast local `go run`
+make dev-up-full           # + app services (compose.yaml + compose.app.yaml)
+make dev-down              # stop the dev stack
 make demo                  # bring up the stack + run a test client against gateway:8080
+make scale-up              # 2 named game-server nodes (compose.scaling.yaml)
 ```
 
 Build tags gate the heavier test suites: `integration` (`tests/integration/`), `validation` + `chaos` (`tests/validation/`, `tests/chaos/`). `internal/validation/` is the reusable engine those suites drive.

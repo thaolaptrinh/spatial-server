@@ -1,0 +1,17 @@
+# Prometheus scrape config for the spatial-server stack.
+# Each service exposes /metrics on the metrics port (configs/defaults.yml: metrics.port, default 9090).
+# Run via: make obs-up  (compose.yaml + compose.app.yaml + compose.obs.yaml)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: spatial-services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - room-service:9090
+          - gateway:9090
+          - game-server:9090
+          - game-server-1:9090
+          - game-server-2:9090

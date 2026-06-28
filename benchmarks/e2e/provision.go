@@ -1,7 +1,7 @@
 // Package e2e drives the real distributed topology (Client → WebSocket →
 // Gateway → gRPC → Runtime Node → AOI → events → gRPC → Gateway → WebSocket →
-// Client) for end-to-end benchmarking. It talks to a running docker-compose
-// stack over the host-published ports.
+// Client) for end-to-end benchmarking. It talks to a running Docker Compose
+// stack (make dev-up-full) over the host-published ports.
 package e2e
 
 import (

@@ -1,0 +1,79 @@
+# Multi-node topology for ownership-transfer / entity-migration validation.
+#
+# Self-contained: includes compose.yaml (Postgres + Redis) and redeclares
+# room-service + gateway so the stack starts with EXACTLY two named
+# game-server nodes. Each node has a distinct routable hostname +
+# SPATIAL_GRPC__HOST so room-service returns per-node addresses and the
+# gateway/peers dial the correct node. Identity itself is a per-process UUIDv7
+# (internal/types/id.go), so the two nodes are always distinct — but the
+# advertised address must be unique, which `--scale` cannot provide. See ADR-027.
+#
+# Use with:
+#   make scale-up   # 2 named game-server nodes
+#   make scale-down
+
+include:
+  - compose.yaml
+
+# Shared build + dependency template for the two game-server nodes.
+# Declared as a top-level extension field (x-* is ignored by Compose) so the
+# anchor can be merged into each named node. `environment` is written per-node
+# below: YAML merge keys do not deep-merge maps, so a shared environment anchor
+# would be fully overridden per node.
+x-game-server-node: &game-server-node
+  build:
+    context: ../..
+    dockerfile: build/docker/game-server.Dockerfile
+  depends_on:
+    postgres:
+      condition: service_healthy
+    room-service:
+      condition: service_started
+
+services:
+  room-service:
+    build:
+      context: ../..
+      dockerfile: build/docker/room-service.Dockerfile
+    ports:
+      - "9001:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPATIAL_POSTGRES__DSN: ${SPATIAL_POSTGRES__DSN:-postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable}
+      SPATIAL_REDIS__ADDR: redis:6379
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: build/docker/gateway.Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      room-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      SPATIAL_GATEWAY__WS_PORT: "8080"
+      SPATIAL_GATEWAY__JWT_SECRET: ${SPATIAL_GATEWAY__JWT_SECRET:-dev-secret-key-change-in-production}
+      SPATIAL_REDIS__ADDR: redis:6379
+
+  game-server-1:
+    <<: *game-server-node
+    hostname: game-server-1
+    environment:
+      SPATIAL_GRPC__HOST: game-server-1
+      SPATIAL_POSTGRES__DSN: ${SPATIAL_POSTGRES__DSN:-postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable}
+      SPATIAL_REDIS__ADDR: redis:6379
+
+  game-server-2:
+    <<: *game-server-node
+    hostname: game-server-2
+    environment:
+      SPATIAL_GRPC__HOST: game-server-2
+      SPATIAL_POSTGRES__DSN: ${SPATIAL_POSTGRES__DSN:-postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable}
+      SPATIAL_REDIS__ADDR: redis:6379

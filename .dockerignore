@@ -1,0 +1,45 @@
+# Build context filter — keeps `docker build` context lean (only what the Go
+# build + runtime image need). Affects layer-cache efficiency and avoids leaking
+# local files / secrets into the context sent to the daemon.
+
+# VCS
+.git/
+.gitignore
+
+# Docs, planning, references (not needed to build/run)
+docs/
+references/
+.agents/
+
+# Tests, benchmarks, infra, deploy manifests (not compiled into binaries)
+tests/
+benchmarks/
+infra/
+deploy/
+
+# Go build artifacts & caches
+tmp/
+**/bin/
+**/*.test
+**/*.test.exe
+**/*.out
+**/_test.go
+**/*_test.go
+/vendor/
+
+# Local env / secrets (never send to the daemon)
+.env
+.env.*
+**/.env
+**/.env.local
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Markdown (not needed in image)
+*.md

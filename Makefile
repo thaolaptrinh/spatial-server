@@ -1,4 +1,11 @@
-.PHONY: all build test lint proto ci clean dev-up dev-down
+.PHONY: all build test lint proto ci clean dev-up dev-up-full dev-down scale-up scale-down obs-up obs-down
+
+# Docker Compose files live under deploy/docker-compose/ (layered, Compose v2):
+#   compose.yaml          base infra (Postgres + Redis)
+#   compose.app.yaml      app services (room-service + gateway + game-server)
+#   compose.scaling.yaml  multi-node (2 named game-server nodes)
+#   compose.obs.yaml      observability overlay (Prometheus + Grafana + Loki)
+COMPOSE := deploy/docker-compose
 
 all: lint test build
 
@@ -37,13 +44,31 @@ ci: lint test build
 clean:
 	rm -rf proto/gen/spatialserver/v1/*.pb.go
 
-# Start development environment
+# Start base infra only (Postgres + Redis) for local `go run` development
 dev-up:
-	docker compose -f deploy/docker-compose/docker-compose.yml up -d
+	docker compose -f $(COMPOSE)/compose.yaml up -d
+
+# Start base infra + app services (room-service + gateway + game-server)
+dev-up-full:
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml up -d
 
 # Stop development environment
 dev-down:
-	docker compose -f deploy/docker-compose/docker-compose.yml down
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml down
+
+# Multi-node topology: 2 named game-server nodes (ownership-transfer testing)
+scale-up:
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.scaling.yaml up -d --build
+
+scale-down:
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.scaling.yaml down
+
+# Observability overlay (run on top of the app stack)
+obs-up:
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml -f $(COMPOSE)/compose.obs.yaml up -d
+
+obs-down:
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml -f $(COMPOSE)/compose.obs.yaml down
 
 # Tidy Go module dependencies
 tidy:
@@ -64,10 +89,10 @@ docker-build:
 	docker build -f build/docker/room-service.Dockerfile -t spatial-room-service .
 	docker build -f build/docker/game-server.Dockerfile -t spatial-game-server .
 
-# Start demo environment with a test client
+# Start demo environment (infra + app) with a test client
 demo:
-	@trap 'docker compose -f deploy/docker-compose/docker-compose.yml down' EXIT; \
-	docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --force-recreate; \
+	@trap 'docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml down' EXIT; \
+	docker compose -f $(COMPOSE)/compose.yaml -f $(COMPOSE)/compose.app.yaml up -d --build --force-recreate; \
 	echo "Waiting for gateway..."; \
 	for i in 1 2 3 4 5 6 7 8 9 10; do \
 		if curl -sf http://localhost:8080/health > /dev/null 2>&1; then \

@@ -21,7 +21,7 @@ git clone https://github.com/yourorg/spatial-server.git
 cd spatial-server
 
 # Start infrastructure (PostgreSQL, Redis)
-docker compose -f deploy/docker-compose/docker-compose.yml up -d
+docker compose -f deploy/docker-compose/compose.yaml up -d
 
 # Run database migrations
 SPATIAL_POSTGRES_DSN="postgres://spatial:spatial@localhost:5432/spatial?sslmode=disable" \
@@ -92,7 +92,7 @@ spatial-server/
 │   └── storage/        # PostgreSQL + Redis connections
 ├── proto/              # gRPC protobuf definitions
 ├── configs/            # YAML config files
-├── deploy/             # Docker Compose + Dockerfiles
+├── deploy/             # Docker Compose (layered compose.*.yaml)
 ├── infra/              # Helm charts + Terraform
 ├── scripts/            # Dev scripts
 └── docs/               # Documentation

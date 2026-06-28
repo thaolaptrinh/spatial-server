@@ -1,0 +1,39 @@
+# Base infrastructure layer — Postgres + Redis only.
+#
+# Used standalone by `make dev-up` for fast local Go development
+# (run the services via `go run ./apps/...` against these). The app services
+# are layered on top via compose.app.yaml / compose.scaling.yaml.
+#
+# Secrets use ${VAR:-default} so out-of-the-box dev works; override production
+# values via a .env file at the repo root (Compose loads .env from the CWD,
+# not from this directory — see ../../.env.example).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-spatial}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spatial}
+      POSTGRES_DB: ${POSTGRES_DB:-spatial}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spatial} -d ${POSTGRES_DB:-spatial}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

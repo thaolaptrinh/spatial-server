@@ -1,0 +1,60 @@
+# Application layer — room-service + gateway + a single game-server.
+#
+# Includes compose.yaml (Postgres + Redis). Use with:
+#   make dev-up-full   # infra + app
+#   make demo          # infra + app, --build + force-recreate + test client
+#
+# The single `game-server` here may be horizontally scaled with
+# `docker compose ... --scale game-server=N` for the degenerate case where any
+# replica can serve any zone. For genuine per-node zone ownership / migration
+# testing, use compose.scaling.yaml instead — `--scale` aliases all replicas to
+# one round-robined DNS name and breaks per-node routing. See ADR-027.
+
+include:
+  - compose.yaml
+
+services:
+  room-service:
+    build:
+      context: ../..
+      dockerfile: build/docker/room-service.Dockerfile
+    ports:
+      - "9001:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPATIAL_POSTGRES__DSN: ${SPATIAL_POSTGRES__DSN:-postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable}
+      SPATIAL_REDIS__ADDR: redis:6379
+
+  game-server:
+    build:
+      context: ../..
+      dockerfile: build/docker/game-server.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      room-service:
+        condition: service_started
+    environment:
+      SPATIAL_GRPC__HOST: game-server
+      SPATIAL_POSTGRES__DSN: ${SPATIAL_POSTGRES__DSN:-postgres://spatial:spatial@postgres:5432/spatial?sslmode=disable}
+      SPATIAL_REDIS__ADDR: redis:6379
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: build/docker/gateway.Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      room-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      SPATIAL_GATEWAY__WS_PORT: "8080"
+      SPATIAL_GATEWAY__JWT_SECRET: ${SPATIAL_GATEWAY__JWT_SECRET:-dev-secret-key-change-in-production}
+      SPATIAL_REDIS__ADDR: redis:6379

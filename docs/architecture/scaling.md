@@ -53,7 +53,7 @@ Defines how each service scales horizontally and vertically, what triggers scali
 ```
 1. Room Service detects threshold breach (CPU >70%, memory >80%, or zone stddev >30%)
 2. Room Service signals orchestrator to spawn new Game Server
-   (Dev: docker compose up --scale; Prod: HPA custom metric → pod spawn)
+   (Dev: make scale-up via compose.scaling.yaml — named nodes; Prod: HPA custom metric → pod spawn)
 3. New Game Server starts → connects to Room Service → Register(JOINING)
 4. Room Service selects most loaded ACTIVE Game Servers
 5. Room Service picks zones to transfer from each (least loaded zones first)
