@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // PostgreSQL — explore schema, query, debug migrations
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-postgres"],
+      "environment": {
+        "DB_HOST": "localhost",
+        "DB_PORT": "5432",
+        "DB_USER": "spatial",
+        "DB_PASSWORD": "spatial",
+        "DB_NAME": "spatial",
+        "DB_SSL_MODE": "disable"
+      }
+    },
+
+    // Redis — inspect cache, pub/sub, keys
+    "redis": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-redis"],
+      "environment": {
+        "REDIS_URL": "redis://localhost:6379"
+      }
+    },
+
+    // Docker — manage dev containers (PG, Redis, services)
+    "docker": {
+      "type": "local",
+      "command": ["npx", "-y", "docker-mcp"]
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/mcp.json",
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "mcp-postgres"],
+      "env": {
+        "DB_HOST": "localhost",
+        "DB_PORT": "5432",
+        "DB_USER": "spatial",
+        "DB_PASSWORD": "spatial",
+        "DB_NAME": "spatial",
+        "DB_SSL_MODE": "disable"
+      }
+    },
+    "redis": {
+      "command": "npx",
+      "args": ["-y", "mcp-redis"],
+      "env": {
+        "REDIS_URL": "redis://localhost:6379"
+      }
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "docker-mcp"]
+    }
+  }
+}
