@@ -28,7 +28,7 @@ x-game-server-node: &game-server-node
     postgres:
       condition: service_healthy
     room-service:
-      condition: service_started
+      condition: service_healthy
 
 services:
   room-service:
@@ -54,7 +54,7 @@ services:
       - "8080:8080"
     depends_on:
       room-service:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     environment:

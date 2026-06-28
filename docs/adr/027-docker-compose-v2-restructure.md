@@ -1,6 +1,6 @@
 # ADR 027: Docker Compose v2 Restructure
 
-> **Last Updated:** 2026-06-28
+> **Last Updated:** 2026-06-28 (hardening pass 2026-06-28)
 
 ## Status
 
@@ -130,8 +130,9 @@ Specific mechanics:
   the cost of ~14 duplicated lines.
 - `.env` must live at the repo root, which is mildly surprising vs. co-locating
   it with the compose files. Mitigated by `.env.example` documentation.
-- App services still use `depends_on: service_started` (not `service_healthy`)
-  because the Dockerfiles do not yet define `HEALTHCHECK`. See Future.
+- App services now use `depends_on: service_healthy` — all Dockerfiles define
+  `HEALTHCHECK` (gRPC health probe for room-service/game-server, HTTP `/health`
+  for gateway).
 
 ## Consequences
 
@@ -146,10 +147,11 @@ Specific mechanics:
 
 ## Future
 
-- **Dockerfile hardening (next pass):** non-root `USER`, `HEALTHCHECK`
-  (`grpc_health_probe` for room-service/game-server; `wget` for the gateway
-  `/health` endpoint), build-args + `org.opencontainers.image.*` labels, then
-  upgrade compose `depends_on` for app services to `service_healthy`. Optional
-  `distroless` base (the binaries are already `CGO_ENABLED=0`).
-- Network segmentation (frontend/backend `internal:`) — not replicated in Compose
-  today; production uses K3s NetworkPolicies.
+- **0-downtime deployments (blue/green):** wire room-service health-aware
+  connection draining in gateway; orchestrate via Compose or K3s.
+- **Network segmentation** (frontend/backend `internal:`): not replicated in
+  Compose today; production uses K3s NetworkPolicies.
+- **Distroless base:** the binaries are `CGO_ENABLED=0` and could migrate to
+  `gcr.io/distroless/static-debian12:nonroot` for a smaller CVE surface. Not
+  pursued in this pass because `grpc_health_probe` and `wget` require additional
+  build-time packaging on distroless.

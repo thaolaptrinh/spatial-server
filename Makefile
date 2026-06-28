@@ -84,10 +84,12 @@ deps:
 	go mod tidy
 
 # Build Docker images for all services
+BUILD_ARGS=--build-arg VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev) \
+           --build-arg BUILD_TIME=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 docker-build:
-	docker build -f build/docker/gateway.Dockerfile -t spatial-gateway .
-	docker build -f build/docker/room-service.Dockerfile -t spatial-room-service .
-	docker build -f build/docker/game-server.Dockerfile -t spatial-game-server .
+	docker build $(BUILD_ARGS) -f build/docker/gateway.Dockerfile -t spatial-gateway .
+	docker build $(BUILD_ARGS) -f build/docker/room-service.Dockerfile -t spatial-room-service .
+	docker build $(BUILD_ARGS) -f build/docker/game-server.Dockerfile -t spatial-game-server .
 
 # Start demo environment (infra + app) with a test client
 demo:
